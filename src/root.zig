@@ -54,13 +54,15 @@ pub const Lexer = struct {
     currentLine: str,
     pos: usize,
     program: std.ArrayList(Line),
+    alloc: std.mem.Allocator,
 
-    pub fn init(source: str, alloc: *const Alloc) Lexer {
-        return .{ .source = source, .currentLine = undefined, .pos = 0, .program = std.ArrayList(Line).init(alloc.*) };
+    pub fn init(source: str, alloc: *const Alloc) !Lexer {
+        const program = try std.ArrayList(Line).initCapacity(alloc.*, 256);
+        return .{ .source = source, .currentLine = undefined, .pos = 0, .program = program, .alloc = alloc.* };
     }
 
-    pub fn deinit(self: Lexer) void {
-        self.program.deinit();
+    pub fn deinit(self: *Lexer) void {
+        self.program.deinit(self.alloc);
     }
 
     pub fn lex(self: *Lexer) !void {
@@ -215,6 +217,6 @@ pub const Lexer = struct {
         const command = try self.consumeAlpha();
 
         const tok = Line{ .line = lineNum, .token = command };
-        try self.program.append(tok);
+        try self.program.append(self.alloc, tok);
     }
 };
