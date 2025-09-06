@@ -43,22 +43,16 @@ const Token = union(enum) {
     ident: str,
 };
 
-const Line = struct {
-    line: usize,
-    token: Token,
-};
-
 const str = []const u8;
 pub const Lexer = struct {
     source: str,
-    currentLine: str,
     pos: usize,
-    program: std.ArrayList(Line),
+    program: std.ArrayList(Token),
     alloc: std.mem.Allocator,
 
     pub fn init(source: str, alloc: *const Alloc) !Lexer {
-        const program = try std.ArrayList(Line).initCapacity(alloc.*, 256);
-        return .{ .source = source, .currentLine = undefined, .pos = 0, .program = program, .alloc = alloc.* };
+        const program = try std.ArrayList(Token).initCapacity(alloc.*, 256);
+        return .{ .source = source, .pos = 0, .program = program, .alloc = alloc.* };
     }
 
     pub fn deinit(self: *Lexer) void {
@@ -66,17 +60,11 @@ pub const Lexer = struct {
     }
 
     pub fn lex(self: *Lexer) !void {
-        var lines = std.mem.splitAny(u8, self.source, "\n");
-
-        while (lines.next()) |line| {
-            self.currentLine = line;
-            self.pos = 0;
-            try self.lexLine();
-        }
+        while (try self.nextToken()) {}
     }
 
     fn isEof(self: *Lexer) bool {
-        return self.pos >= self.currentLine.len;
+        return self.pos >= self.source.len;
     }
 
     fn peek(self: *Lexer) ?u8 {
@@ -84,7 +72,7 @@ pub const Lexer = struct {
             return null;
         }
 
-        return self.currentLine[self.pos];
+        return self.source[self.pos];
     }
 
     fn next(self: *Lexer) void {
@@ -116,8 +104,13 @@ pub const Lexer = struct {
     fn consumeNumber(self: *Lexer) !Token {
         const begin = self.pos;
         while (!self.isEof() and std.ascii.isDigit(self.peek().?)) : (self.next()) {}
+        if (!self.isEof() and self.peek().? == '.') {
+            self.next();
+            while (!self.isEof() and std.ascii.isDigit(self.peek().?)) : (self.next()) {}
+            self.next();
+        }
 
-        const literal = self.currentLine[begin..self.pos];
+        const literal = self.source[begin..self.pos];
         const number = try std.fmt.parseFloat(f64, literal);
 
         return .{ .number = number };
@@ -125,8 +118,8 @@ pub const Lexer = struct {
 
     fn consumeAlpha(self: *Lexer) !Token {
         const begin = self.pos;
-        while (!self.isEof() and !std.ascii.isWhitespace(self.currentLine[self.pos])) : (self.next()) {}
-        const literal = self.currentLine[begin..self.pos];
+        while (!self.isEof() and !std.ascii.isWhitespace(self.source[self.pos])) : (self.next()) {}
+        const literal = self.source[begin..self.pos];
         if (Lexer.isKeyword(literal)) |keyword| {
             return .{ .keyword = keyword };
         }
@@ -137,21 +130,21 @@ pub const Lexer = struct {
     fn consumeStringLit(self: *Lexer) !Token {
         const begin = self.pos;
         self.next();
-        while (!self.isEof() and self.currentLine[self.pos] != '"') : (self.next()) {}
+        while (!self.isEof() and self.source[self.pos] != '"') : (self.next()) {}
         self.next();
-        const string = self.currentLine[begin..self.pos];
+        const string = self.source[begin..self.pos];
 
         return .{ .string = string };
     }
 
-    fn readNumber(self: *Lexer) !usize {
-        const begin = self.pos;
-        while (!self.isEof() and std.ascii.isDigit(self.peek().?)) : (self.next()) {}
+    // fn readNumber(self: *Lexer) !usize {
+    //     const begin = self.pos;
+    //     while (!self.isEof() and std.ascii.isDigit(self.peek().?)) : (self.next()) {}
+    //     const literal = self.source[begin..self.pos];
 
-        const literal = self.currentLine[begin..self.pos];
-        const number = try std.fmt.parseUnsigned(usize, literal, 10);
-        return number;
-    }
+    //     const number = try std.fmt.parseUnsigned(usize, literal, 10);
+    //     return number;
+    // }
 
     fn nextIs(nextCh: ?u8, opt: u8) bool {
         if (nextCh) |ch| {
@@ -161,10 +154,14 @@ pub const Lexer = struct {
     }
 
     fn isOperator(self: *Lexer) ?Operator {
-        const current = self.currentLine[self.pos];
+        if (self.isEof()) {
+            return null;
+        }
+
+        const current = self.source[self.pos];
         var nextCh: ?u8 = null;
-        if (self.pos + 1 < self.currentLine.len) {
-            nextCh = self.currentLine[self.pos + 1];
+        if (self.pos + 1 < self.source.len) {
+            nextCh = self.source[self.pos + 1];
         }
 
         switch (current) {
@@ -211,12 +208,29 @@ pub const Lexer = struct {
         }
     }
 
-    fn lexLine(self: *Lexer) !void {
-        const lineNum: usize = self.readNumber() catch 0;
-        try self.consumeWhitespace();
-        const command = try self.consumeAlpha();
+    fn nextToken(self: *Lexer) !bool {
+        if (self.isEof()) {
+            return false;
+        }
 
-        const tok = Line{ .line = lineNum, .token = command };
+        try self.consumeWhitespace();
+
+        const tok =
+            if (std.ascii.isDigit(self.peek().?)) block: {
+                break :block try self.consumeNumber();
+            } else if (self.peek().? == '"') block: {
+                break :block try self.consumeStringLit();
+            } else block: {
+                if (self.isOperator()) |op| {
+                    self.next();
+
+                    break :block Token{ .operator = op };
+                }
+
+                break :block try self.consumeAlpha();
+            };
+
         try self.program.append(self.alloc, tok);
+        return true;
     }
 };

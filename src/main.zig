@@ -25,7 +25,7 @@ pub fn main() !void {
 
         try lexer.lex();
         for (lexer.program.items) |token| {
-            std.log.info("{}: {}", .{ token.line, token.token });
+            std.log.info("{}", .{token});
         }
     } else |e| {
         std.log.info("{}", .{e});
