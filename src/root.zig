@@ -5,6 +5,7 @@ const Keyword = enum {
     Print,
     Let,
     If,
+    Then,
     Next,
     For,
     To,
@@ -33,6 +34,8 @@ const Operator = enum {
     DoubleEq,
     NotEq,
     Comma,
+    LeftParen,
+    RightParen,
 };
 
 const Token = union(enum) {
@@ -118,9 +121,14 @@ pub const Lexer = struct {
 
     fn consumeAlpha(self: *Lexer) !Token {
         const begin = self.pos;
-        while (!self.isEof() and !std.ascii.isWhitespace(self.source[self.pos])) : (self.next()) {}
+        while (!self.isEof() and (std.ascii.isAlphanumeric(self.peek().?) or self.peek().? == '_')) : (self.next()) {}
         const literal = self.source[begin..self.pos];
-        if (Lexer.isKeyword(literal)) |keyword| {
+
+        if (begin == self.pos) {
+            return error.InvalidToken;
+        }
+
+        if (isKeyword(literal)) |keyword| {
             return .{ .keyword = keyword };
         }
 
@@ -172,6 +180,8 @@ pub const Lexer = struct {
             '%' => return .Mod,
             '-' => return .Sub,
             ',' => return .Comma,
+            '(' => return .LeftParen,
+            ')' => return .RightParen,
             '=' => {
                 if (nextIs(nextCh, '=')) {
                     self.next();

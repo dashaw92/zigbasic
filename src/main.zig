@@ -2,9 +2,9 @@ const std = @import("std");
 const lib = @import("zigbasic_lib");
 
 const src =
-    \\ PRINT Hello
+    \\ PRINT "Hello"
     \\ FOR I=0 TO 20
-    \\ PRINT Hi
+    \\ PRINT "Hi"
     \\ NEXT I
 ;
 
