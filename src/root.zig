@@ -38,6 +38,8 @@ const Operator = enum {
     RightParen,
 };
 
+const str = []const u8;
+
 const Token = union(enum) {
     number: f64,
     operator: Operator,
@@ -46,7 +48,6 @@ const Token = union(enum) {
     ident: str,
 };
 
-const str = []const u8;
 pub const Lexer = struct {
     source: str,
     pos: usize,
@@ -59,6 +60,13 @@ pub const Lexer = struct {
     }
 
     pub fn deinit(self: *Lexer) void {
+        for (self.program.items) |token| {
+            switch (token) {
+                .ident => |ident| self.alloc.free(ident),
+                .string => |string| self.alloc.free(string),
+                else => {},
+            }
+        }
         self.program.deinit(self.alloc);
     }
 
@@ -132,7 +140,10 @@ pub const Lexer = struct {
             return .{ .keyword = keyword };
         }
 
-        return .{ .ident = literal };
+        //Once lexing is done, can't assume the provided source code
+        //will remain alive.
+        const ownedCopy = try self.alloc.dupe(u8, literal);
+        return .{ .ident = ownedCopy };
     }
 
     fn consumeStringLit(self: *Lexer) !Token {
@@ -142,17 +153,11 @@ pub const Lexer = struct {
         self.next();
         const string = self.source[begin..self.pos];
 
-        return .{ .string = string };
+        //Once lexing is done, can't assume the provided source code
+        //will remain alive.
+        const ownedCopy = try self.alloc.dupe(u8, string);
+        return .{ .string = ownedCopy };
     }
-
-    // fn readNumber(self: *Lexer) !usize {
-    //     const begin = self.pos;
-    //     while (!self.isEof() and std.ascii.isDigit(self.peek().?)) : (self.next()) {}
-    //     const literal = self.source[begin..self.pos];
-
-    //     const number = try std.fmt.parseUnsigned(usize, literal, 10);
-    //     return number;
-    // }
 
     fn nextIs(nextCh: ?u8, opt: u8) bool {
         if (nextCh) |ch| {
