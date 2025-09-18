@@ -1,5 +1,6 @@
 const std = @import("std");
-const lib = @import("zigbasic_lib");
+const Lexer = @import("lexer.zig");
+const Interpreter = @import("interpreter.zig");
 
 const src =
     \\ PRINT "Hello"
@@ -20,14 +21,15 @@ pub fn main() !void {
     while (stdin.takeDelimiterExclusive('\n')) |line| {
         if (std.ascii.eqlIgnoreCase(line, "/quit")) break;
 
-        var lexer = try lib.Lexer.init(line, &alloc);
+        var lexer = try Lexer.init(line, &alloc);
         defer lexer.deinit();
 
         try lexer.lex();
-        for (lexer.program.items) |token| {
+        for (lexer.tokens.items) |token| {
             std.log.info("{}", .{token});
         }
     } else |e| {
+        if (e == error.EndOfStream) return;
         std.log.info("{}", .{e});
     }
 }
