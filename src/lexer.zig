@@ -1,6 +1,8 @@
 const std = @import("std");
 const Alloc = std.mem.Allocator;
 
+const Lexer = @This();
+
 pub const Keyword = enum {
     Print,
     Let,
@@ -40,25 +42,26 @@ pub const Operator = enum {
 
 const str = []const u8;
 
-const Token = union(enum) {
+pub const Token = union(enum) {
     number: f64,
     operator: Operator,
     keyword: Keyword,
     string: str,
     ident: str,
+    newline,
 };
 
 source: str,
 pos: usize,
 tokens: std.ArrayList(Token),
-alloc: std.mem.Allocator,
+alloc: Alloc,
 
-pub fn init(source: str, alloc: *const Alloc) !@This() {
+pub fn init(source: str, alloc: *const Alloc) !Lexer {
     const tokens = try std.ArrayList(Token).initCapacity(alloc.*, 256);
     return .{ .source = source, .pos = 0, .tokens = tokens, .alloc = alloc.* };
 }
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *Lexer) void {
     for (self.tokens.items) |token| {
         switch (token) {
             .ident => |ident| self.alloc.free(ident),
@@ -69,15 +72,16 @@ pub fn deinit(self: *@This()) void {
     self.tokens.deinit(self.alloc);
 }
 
-pub fn lex(self: *@This()) !void {
+pub fn lex(self: *Lexer) !void {
     while (try self.nextToken()) {}
+    try self.tokens.append(self.alloc, Token.newline);
 }
 
-fn isEof(self: *@This()) bool {
+fn isEof(self: *Lexer) bool {
     return self.pos >= self.source.len;
 }
 
-fn peek(self: *@This()) ?u8 {
+fn peek(self: *Lexer) ?u8 {
     if (self.isEof()) {
         return null;
     }
@@ -85,7 +89,7 @@ fn peek(self: *@This()) ?u8 {
     return self.source[self.pos];
 }
 
-fn next(self: *@This()) void {
+fn next(self: *Lexer) void {
     if (self.isEof()) {
         return;
     }
@@ -107,17 +111,23 @@ fn isKeyword(buf: str) ?Keyword {
     return null;
 }
 
-fn consumeWhitespace(self: *@This()) !void {
-    while (!self.isEof() and std.ascii.isWhitespace(self.peek().?)) : (self.next()) {}
+fn consumeWhitespace(self: *Lexer) !bool {
+    while (!self.isEof() and std.ascii.isWhitespace(self.peek().?)) {
+        defer self.next();
+        if (nextIs(self.peek(), '\n')) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
-fn consumeNumber(self: *@This()) !Token {
+fn consumeNumber(self: *Lexer) !Token {
     const begin = self.pos;
     while (!self.isEof() and std.ascii.isDigit(self.peek().?)) : (self.next()) {}
     if (!self.isEof() and self.peek().? == '.') {
         self.next();
         while (!self.isEof() and std.ascii.isDigit(self.peek().?)) : (self.next()) {}
-        self.next();
     }
 
     const literal = self.source[begin..self.pos];
@@ -126,7 +136,7 @@ fn consumeNumber(self: *@This()) !Token {
     return .{ .number = number };
 }
 
-fn consumeAlpha(self: *@This()) !Token {
+fn consumeAlpha(self: *Lexer) !Token {
     const begin = self.pos;
     while (!self.isEof() and (std.ascii.isAlphanumeric(self.peek().?) or self.peek().? == '_')) : (self.next()) {}
     const literal = self.source[begin..self.pos];
@@ -145,7 +155,7 @@ fn consumeAlpha(self: *@This()) !Token {
     return .{ .ident = ownedCopy };
 }
 
-fn consumeStringLit(self: *@This()) !Token {
+fn consumeStringLit(self: *Lexer) !Token {
     const begin = self.pos;
     self.next();
     while (!self.isEof() and self.source[self.pos] != '"') : (self.next()) {}
@@ -165,7 +175,7 @@ fn nextIs(nextCh: ?u8, opt: u8) bool {
     return false;
 }
 
-fn isOperator(self: *@This()) ?Operator {
+fn isOperator(self: *Lexer) ?Operator {
     if (self.isEof()) {
         return null;
     }
@@ -222,12 +232,15 @@ fn isOperator(self: *@This()) ?Operator {
     }
 }
 
-fn nextToken(self: *@This()) !bool {
+fn nextToken(self: *Lexer) !bool {
     if (self.isEof()) {
         return false;
     }
 
-    try self.consumeWhitespace();
+    if (try self.consumeWhitespace()) {
+        try self.tokens.append(self.alloc, Token.newline);
+        return true;
+    }
 
     const tok =
         if (std.ascii.isDigit(self.peek().?)) block: {
