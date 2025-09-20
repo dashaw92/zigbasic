@@ -124,6 +124,7 @@ fn consumeWhitespace(self: *Lexer) !bool {
 
 fn consumeNumber(self: *Lexer) !Token {
     const begin = self.pos;
+
     while (!self.isEof() and std.ascii.isDigit(self.peek().?)) : (self.next()) {}
     if (!self.isEof() and self.peek().? == '.') {
         self.next();
@@ -248,6 +249,11 @@ fn nextToken(self: *Lexer) !bool {
         } else if (self.peek().? == '"') block: {
             break :block try self.consumeStringLit();
         } else block: {
+            if (nextIs(self.peek().?, ':')) {
+                self.next();
+                break :block Token.newline;
+            }
+
             if (self.isOperator()) |op| {
                 self.next();
 

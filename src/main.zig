@@ -2,10 +2,10 @@ const std = @import("std");
 const Interpreter = @import("interpreter.zig");
 
 const src =
-    \\ PRINT "Hello"
-    \\ FOR I=0 TO 20
-    \\ PRINT "Hi"
-    \\ NEXT I
+    \\PRINT "Hello", 100 : PRINT "Test"
+    \\FOR I=0 TO 20
+    \\PRINT "Hi"
+    \\NEXT I
 ;
 
 pub fn main() !void {
@@ -25,6 +25,8 @@ pub fn main() !void {
     for (int.program.items) |stmt| {
         std.log.info("{any}", .{stmt});
     }
+
+    try int.run();
 
     // } else |e| {
     // if (e == error.EndOfStream) return;
