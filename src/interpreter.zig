@@ -93,6 +93,6 @@ fn buildStatements(self: *Interpreter) !void {
 
 pub fn run(self: *Interpreter) !void {
     for (self.program.items) |stmt| {
-        try stmt.eval(&self.state);
+        try stmt.exec(&self.state);
     }
 }
