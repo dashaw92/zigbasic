@@ -23,7 +23,8 @@ pub fn main() !void {
     var int = try Interpreter.init(&alloc, src);
     defer int.deinit();
     for (int.program.items) |stmt| {
-        std.log.info("{any}", .{stmt});
+        _ = stmt;
+        // std.log.info("{any}", .{stmt});
     }
 
     try int.run();
