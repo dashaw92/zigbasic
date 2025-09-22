@@ -2,7 +2,7 @@ const std = @import("std");
 const Interpreter = @import("interpreter.zig");
 
 const src =
-    \\PRINT "Hello", 100 : PRINT "Test"
+    \\PRINT "Hello ", "Hello ", 5500 / 2 
     \\FOR I=0 TO 20
     \\PRINT "Hi"
     \\NEXT I

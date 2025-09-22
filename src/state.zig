@@ -25,10 +25,24 @@ pub fn deinit(self: *State) void {
 }
 
 pub fn concat(self: *State, val1: Value, val2: Value) ![]const u8 {
-    _ = self;
-    _ = val1;
-    _ = val2;
-    return "todo";
+    const val1str = try val1.toString(&self.alloc);
+    const val2str = try val2.toString(&self.alloc);
+
+    const output = try std.fmt.allocPrint(self.alloc, "{s}{s}", .{
+        val1str,
+        val2str,
+    });
+
+    if (val1 == .number) {
+        self.alloc.free(val1str);
+    }
+
+    if (val2 == .number) {
+        self.alloc.free(val2str);
+    }
+
+    try self.strings.append(self.alloc, output);
+    return output;
 }
 
 pub fn valueOf(self: *State, ident: []const u8) ?Value {
@@ -42,4 +56,11 @@ pub fn set(self: *State, ident: []const u8, value: Value) !void {
 pub const Value = union(enum) {
     number: f64,
     string: []const u8,
+
+    pub fn toString(self: *const Value, alloc: *Alloc) ![]const u8 {
+        return switch (self.*) {
+            .number => |num| std.fmt.allocPrint(alloc.*, "{}", .{num}),
+            .string => |s| s,
+        };
+    }
 };

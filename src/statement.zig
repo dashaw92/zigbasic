@@ -30,7 +30,10 @@ pub fn exec(self: *const Statement, state: *State) !void {
                 //     };
                 // }
                 const value = try eval(&self.tokens[1], self.tokens[2..], state, null);
-                std.log.info("{any}", .{value});
+                try switch (value) {
+                    .number => |n| writer.interface.print("{}", .{n}),
+                    .string => |s| writer.interface.print("{s}", .{s}),
+                };
                 try writer.interface.print("\n", .{});
             },
             else => {},
@@ -77,8 +80,19 @@ fn eval(current: *const Token, rest: []const Token, state: *State, acc: ?Value) 
                     },
                     .Comma => {
                         if (acc == null or acc.? != Value.string or next == null) return error.SyntaxErrorComma;
-                        // accNext = Value{ .string = std.}
-                        accNext = Value{ .string = try state.concat(acc.?, next.?) };
+
+                        if (next.? == .string) {
+                            accNext = Value{ .string = try state.concat(acc.?, next.?) };
+                        } else {
+                            var end: usize = 0;
+                            while (end < rest.len and (rest[end] == .number or rest[end] == .operator)) : (end += 1) {}
+
+                            std.log.info("{} {} {any}", .{ next.?, end, rest[0..end] });
+                            const group = try eval(&rest[0], rest[0..end], state, next);
+                            accNext = Value{ .string = try state.concat(acc.?, group) };
+                            nextToken = end;
+                            nextArgBase = end + 1;
+                        }
                     },
                     else => {},
                 }

@@ -161,7 +161,7 @@ fn consumeStringLit(self: *Lexer) !Token {
     self.next();
     while (!self.isEof() and self.source[self.pos] != '"') : (self.next()) {}
     self.next();
-    const string = self.source[begin..self.pos];
+    const string = self.source[begin + 1 .. self.pos - 1];
 
     //Once lexing is done, can't assume the provided source code
     //will remain alive.
