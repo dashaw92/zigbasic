@@ -4,7 +4,7 @@ const Map = std.StringHashMap;
 
 const State = @This();
 
-jumpBack: bool,
+jumpBack: ?usize,
 symbols: Map(Value),
 strings: std.ArrayList([]u8),
 jumps: std.ArrayList(LoopState),
@@ -12,7 +12,7 @@ alloc: Alloc,
 
 pub fn init(alloc: *const Alloc) !State {
     return .{
-        .jumpBack = false,
+        .jumpBack = null,
         .symbols = Map(Value).init(alloc.*),
         .strings = try std.ArrayList([]u8).initCapacity(alloc.*, 512),
         .jumps = try std.ArrayList(LoopState).initCapacity(alloc.*, 1024),

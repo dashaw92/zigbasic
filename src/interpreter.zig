@@ -105,9 +105,9 @@ pub fn run(self: *Interpreter) !void {
     while (i <= maxIdx) {
         try self.program.items[i].exec(&self.state);
 
-        if (self.state.jumpBack) {
-            i = lineToIdx.get(self.state.peekJump().?.targetLine).?;
-            self.state.jumpBack = false;
+        if (self.state.jumpBack) |target| {
+            i = lineToIdx.get(target).?;
+            self.state.jumpBack = null;
             continue;
         }
 

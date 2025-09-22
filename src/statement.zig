@@ -28,8 +28,6 @@ pub fn exec(self: *const Statement, state: *State) !void {
                 try writer.interface.print("\n", .{});
             },
             .For => {
-                if (state.peekJump() != null and state.peekJump().?.targetLine == self.line) return;
-
                 if (self.tokens[1] != .ident) return error.ForMissingIdent;
                 const ident = self.tokens[1].ident;
                 if (self.tokens[2] != .operator or self.tokens[2].operator != .Equal) return error.ForAssignmentError;
@@ -65,8 +63,14 @@ pub fn exec(self: *const Statement, state: *State) !void {
                     state.drop(ident);
                 } else {
                     try state.set(ident, Value{ .number = next });
-                    state.jumpBack = true;
+                    state.jumpBack = loop.?.targetLine;
                 }
+            },
+            .Goto => {
+                const target = toValue(&self.tokens[1], state);
+                if (target == null or target.? != .number) return error.GotoBadJump;
+
+                state.jumpBack = @intFromFloat(target.?.number);
             },
             else => {},
         },

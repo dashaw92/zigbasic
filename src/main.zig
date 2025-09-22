@@ -2,10 +2,9 @@ const std = @import("std");
 const Interpreter = @import("interpreter.zig");
 
 const src =
-    \\PRINT "Hello ", "Hello ", 11 < 2 + 2 * 2 
-    \\FOR I=0 TO 20
-    \\PRINT I
-    \\NEXT I
+    \\1 PRINT "Hi"
+    \\2 PRINT "Test"
+    \\3 GOTO 1
 ;
 
 pub fn main() !void {
