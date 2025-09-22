@@ -4,14 +4,18 @@ const Map = std.StringHashMap;
 
 const State = @This();
 
+jumpBack: bool,
 symbols: Map(Value),
 strings: std.ArrayList([]u8),
+jumps: std.ArrayList(LoopState),
 alloc: Alloc,
 
 pub fn init(alloc: *const Alloc) !State {
     return .{
+        .jumpBack = false,
         .symbols = Map(Value).init(alloc.*),
         .strings = try std.ArrayList([]u8).initCapacity(alloc.*, 512),
+        .jumps = try std.ArrayList(LoopState).initCapacity(alloc.*, 1024),
         .alloc = alloc.*,
     };
 }
@@ -20,8 +24,21 @@ pub fn deinit(self: *State) void {
     for (self.strings.items) |str| {
         self.alloc.free(str);
     }
+    self.jumps.deinit(self.alloc);
     self.strings.deinit(self.alloc);
     self.symbols.deinit();
+}
+
+pub fn pushJump(self: *State, loop: LoopState) !void {
+    try self.jumps.append(self.alloc, loop);
+}
+
+pub fn peekJump(self: *State) ?LoopState {
+    return self.jumps.getLastOrNull();
+}
+
+pub fn popJump(self: *State) ?LoopState {
+    return self.jumps.pop();
 }
 
 pub fn concat(self: *State, val1: Value, val2: Value) ![]const u8 {
@@ -53,6 +70,10 @@ pub fn set(self: *State, ident: []const u8, value: Value) !void {
     try self.symbols.put(ident, value);
 }
 
+pub fn drop(self: *State, ident: []const u8) void {
+    _ = self.symbols.remove(ident);
+}
+
 pub const Value = union(enum) {
     number: f64,
     string: []const u8,
@@ -63,4 +84,12 @@ pub const Value = union(enum) {
             .string => |s| s,
         };
     }
+};
+
+pub const LoopState = struct {
+    targetLine: usize,
+    ident: []const u8,
+    step: f64,
+    start: f64,
+    stop: f64,
 };

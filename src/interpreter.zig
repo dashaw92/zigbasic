@@ -92,7 +92,25 @@ fn buildStatements(self: *Interpreter) !void {
 }
 
 pub fn run(self: *Interpreter) !void {
-    for (self.program.items) |stmt| {
-        try stmt.exec(&self.state);
+    var maxIdx: usize = 0;
+    var lineToIdx = std.AutoHashMap(usize, usize).init(self.alloc);
+    defer lineToIdx.deinit();
+    for (0.., self.program.items) |i, stmt| {
+        try lineToIdx.put(stmt.line, i);
+
+        maxIdx = i;
+    }
+
+    var i: usize = 0;
+    while (i <= maxIdx) {
+        try self.program.items[i].exec(&self.state);
+
+        if (self.state.jumpBack) {
+            i = lineToIdx.get(self.state.peekJump().?.targetLine).?;
+            self.state.jumpBack = false;
+            continue;
+        }
+
+        i += 1;
     }
 }
