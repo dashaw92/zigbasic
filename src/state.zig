@@ -4,9 +4,13 @@ const Map = std.StringHashMap;
 
 const State = @This();
 
+//Redirects flow to a line number if set
 jumpBack: ?usize,
+//Variables
 symbols: Map(Value),
+//Heap allocated strings where the `,` (concat) operator was used
 strings: std.ArrayList([]u8),
+//Current stack of loops in the program
 jumps: std.ArrayList(LoopState),
 alloc: Alloc,
 

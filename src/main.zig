@@ -2,10 +2,9 @@ const std = @import("std");
 const Interpreter = @import("interpreter.zig");
 
 const src =
-    \\FOR I=1 TO 3
-    \\FOR J=1 TO 3
-    \\PRINT "I = ", I, " and J = ", J, " and I * J = ", I * J
-    \\NEXT J
+    \\FOR I=1 TO 10 STEP 3
+    \\PRINT "I = ", I
+    \\GOTO 3
     \\NEXT I
 ;
 

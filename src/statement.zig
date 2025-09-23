@@ -40,11 +40,19 @@ pub fn exec(self: *const Statement, state: *State) !void {
 
                 if (startRange == null or endRange == null or startRange.? != .number or endRange.? != .number) return error.ForInvalidRange;
 
+                var step: f64 = 1;
+                if (self.tokens.len > 5 and self.tokens[6] == .keyword and self.tokens[6].keyword == .Step) {
+                    const providedStep = toValue(&self.tokens[7], state);
+                    if (providedStep == null or providedStep.? == .string) return error.ForInvalidStep;
+
+                    step = providedStep.?.number;
+                }
+
                 try state.set(ident, startRange.?);
                 try state.pushJump(.{
                     .targetLine = self.line,
                     .ident = ident,
-                    .step = 1,
+                    .step = step,
                     .start = startRange.?.number,
                     .stop = endRange.?.number,
                 });
