@@ -28,6 +28,8 @@ pub fn exec(self: *const Statement, state: *State) !void {
                 try writer.interface.print("\n", .{});
             },
             .For => {
+                if (state.peekJump() != null and state.peekJump().?.targetLine == self.line) return;
+
                 if (self.tokens[1] != .ident) return error.ForMissingIdent;
                 const ident = self.tokens[1].ident;
                 if (self.tokens[2] != .operator or self.tokens[2].operator != .Equal) return error.ForAssignmentError;
@@ -58,11 +60,10 @@ pub fn exec(self: *const Statement, state: *State) !void {
                 if (current == null or current.? != .number) return error.NextBadLoopControl;
 
                 const next = current.?.number + loop.?.step;
+                try state.set(ident, Value{ .number = next });
                 if (next > loop.?.stop) {
                     _ = state.popJump();
-                    state.drop(ident);
                 } else {
-                    try state.set(ident, Value{ .number = next });
                     state.jumpBack = loop.?.targetLine;
                 }
             },
@@ -119,7 +120,7 @@ fn eval(current: *const Token, rest: []const Token, state: *State, acc: ?Value) 
                                 accNext = Value{ .string = try state.concat(acc.?, next.?) };
                             } else {
                                 var end: usize = 0;
-                                while (end < rest.len and (rest[end] == .number or rest[end] == .operator)) : (end += 1) {}
+                                while (end < rest.len and (rest[end] == .number or (rest[end] == .operator and rest[end].operator != .Comma) or rest[end] == .ident)) : (end += 1) {}
 
                                 const group = try eval(&rest[0], rest[0..end], state, next);
                                 accNext = Value{ .string = try state.concat(acc.?, group) };

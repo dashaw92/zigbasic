@@ -42,11 +42,7 @@ pub fn deinit(self: *Interpreter) void {
 
 //Groups all tokens from the lexed source into statements, aka reconstructs the lines
 fn buildStatements(self: *Interpreter) !void {
-    //If true and the first token encountered on the line is a number, it's taken
-    //to be the line number of the statement.
-    var beginningOfLine = true;
-    //The next line number available. If statements omit a line number, the line
-    //will be inserted with this value. It's automatically incremented per-line,
+    //The next line number available. It's automatically incremented per-line,
     //so the resulting statements maintain a stable ordering via Statement::line.
     var lineNumber: usize = 0;
 
@@ -67,26 +63,10 @@ fn buildStatements(self: *Interpreter) !void {
                     .tokens = self.lexer.tokens.items[start..end],
                 });
 
-                beginningOfLine = true;
                 start = end + 1;
                 lineNumber += 1;
             },
-            .number => |num| {
-                //If this is the first token of the current statement, update
-                //the tracked lineNumber field to the provided value.
-                if (beginningOfLine) {
-                    //Quirk: this will accept floating point numbers, but the fractional parts
-                    //are lost. It works fine, so it can stay.
-                    lineNumber = @min(lineNumber + 1, @as(usize, @intFromFloat(num)));
-                    start += 1;
-                    beginningOfLine = false;
-                }
-            },
             else => {},
-        }
-
-        if (beginningOfLine and end > start + 1) {
-            beginningOfLine = false;
         }
     }
 }
@@ -96,6 +76,7 @@ pub fn run(self: *Interpreter) !void {
     var lineToIdx = std.AutoHashMap(usize, usize).init(self.alloc);
     defer lineToIdx.deinit();
     for (0.., self.program.items) |i, stmt| {
+        // std.log.info("{}", .{stmt});
         try lineToIdx.put(stmt.line, i);
 
         maxIdx = i;
@@ -107,6 +88,7 @@ pub fn run(self: *Interpreter) !void {
 
         if (self.state.jumpBack) |target| {
             i = lineToIdx.get(target).?;
+            // std.log.info("{} ({})", .{ i, self.program.items[i] });
             self.state.jumpBack = null;
             continue;
         }
