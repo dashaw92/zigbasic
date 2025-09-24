@@ -10,17 +10,19 @@ const Value = State.Value;
 const Statement = @This();
 
 line: usize,
-tokens: []const Token,
+stream: TokenStream,
 
 pub fn exec(self: *const Statement, state: *State) !void {
     const handle = std.fs.File.stdout();
     var writer = handle.writer(&.{});
 
-    const command = self.tokens[0];
-    switch (command) {
+    var stream = self.stream;
+    stream.reset();
+    const command = stream.pop().?;
+    switch (command.*) {
         .keyword => |kw| switch (kw) {
             .Print => {
-                const value = try eval(&self.tokens[1], self.tokens[2..], state, null);
+                const value = try eval(&stream, state, null);
                 try switch (value) {
                     .number => |n| writer.interface.print("{}", .{n}),
                     .string => |s| writer.interface.print("{s}", .{s}),
@@ -30,19 +32,19 @@ pub fn exec(self: *const Statement, state: *State) !void {
             .For => {
                 if (state.peekJump() != null and state.peekJump().?.targetLine == self.line) return;
 
-                if (self.tokens[1] != .ident) return error.ForMissingIdent;
-                const ident = self.tokens[1].ident;
-                if (self.tokens[2] != .operator or self.tokens[2].operator != .Equal) return error.ForAssignmentError;
+                const ident = stream.consumeIdent() catch return error.ForMissingIdent;
+                stream.consumeOp(.Equal) catch return error.ForAssignmentError;
 
-                const startRange = toValue(&self.tokens[3], state);
-                if (self.tokens[4] != .keyword or self.tokens[4].keyword != .To) return error.ForAssignmentError;
-                const endRange = toValue(&self.tokens[5], state);
+                const startRange = toValue(stream.pop().?, state);
+                stream.consumeKeyword(.To) catch return error.ForMissingTo;
+                const endRange = toValue(stream.pop().?, state);
 
                 if (startRange == null or endRange == null or startRange.? != .number or endRange.? != .number) return error.ForInvalidRange;
 
                 var step: f64 = 1;
-                if (self.tokens.len > 5 and self.tokens[6] == .keyword and self.tokens[6].keyword == .Step) {
-                    const providedStep = toValue(&self.tokens[7], state);
+                const nextTok = stream.pop();
+                if (nextTok != null and nextTok.?.* == .keyword and nextTok.?.*.keyword == .Step) {
+                    const providedStep = toValue(stream.pop() orelse return error.ForMissingStep, state);
                     if (providedStep == null or providedStep.? == .string) return error.ForInvalidStep;
 
                     step = providedStep.?.number;
@@ -58,8 +60,7 @@ pub fn exec(self: *const Statement, state: *State) !void {
                 });
             },
             .Next => {
-                if (self.tokens[1] != .ident) return error.NextMissingIdent;
-                const ident = self.tokens[1].ident;
+                const ident = stream.consumeIdent() catch return error.NextMissingIdent;
                 const loop = state.peekJump();
                 if (loop == null) return error.AnomalousNext;
                 if (!std.mem.eql(u8, ident, loop.?.ident)) return error.NextMismatchedIdents;
@@ -76,7 +77,7 @@ pub fn exec(self: *const Statement, state: *State) !void {
                 }
             },
             .Goto => {
-                const target = toValue(&self.tokens[1], state);
+                const target = toValue(stream.pop().?, state);
                 if (target == null or target.? != .number) return error.GotoBadJump;
 
                 state.jumpBack = @intFromFloat(target.?.number);
@@ -89,17 +90,14 @@ pub fn exec(self: *const Statement, state: *State) !void {
     try writer.interface.flush();
 }
 
-fn eval(current: *const Token, rest: []const Token, state: *State, acc: ?Value) !Value {
+fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
     //State of the accumulator after running this step of the recursion
     var accNext: ?Value = null;
-    //Bookkeeping for wrangling the current and rest values for the next step of recursion
-    var nextToken: usize = 0;
-    var nextArgBase: usize = 1;
 
     //If there's nothing currently on the "stack", treat literals differently and push them directly
     //into the accumulator.
     if (acc == null) {
-        accNext = toValue(current, state);
+        accNext = toValue(stream.pop().?, state);
         //Any null here means the current token is a keyword or operator
         //TODO: Have yet to decide how to handle negatives- should the lexer handle this?
         //If not, this is where it should be checked and handled.
@@ -109,11 +107,9 @@ fn eval(current: *const Token, rest: []const Token, state: *State, acc: ?Value) 
         }
     } else {
         //Value is present in accumulator, so normal parsing occurs
-        switch (current.*) {
+        switch (stream.pop().?.*) {
             .operator => |op| {
-                nextToken = 1;
-                nextArgBase = 2;
-                const next = toValue(&rest[0], state);
+                const next = toValue(stream.pop().?, state);
 
                 if (acc != null and acc.? == .number and next != null and next.? == .number) {
                     if (doMathOp(op, acc.?.number, next.?.number)) |result| {
@@ -127,13 +123,13 @@ fn eval(current: *const Token, rest: []const Token, state: *State, acc: ?Value) 
                             if (next.? == .string) {
                                 accNext = Value{ .string = try state.concat(acc.?, next.?) };
                             } else {
-                                var end: usize = 0;
-                                while (end < rest.len and (rest[end] == .number or (rest[end] == .operator and rest[end].operator != .Comma) or rest[end] == .ident)) : (end += 1) {}
-
-                                const group = try eval(&rest[0], rest[0..end], state, next);
-                                accNext = Value{ .string = try state.concat(acc.?, group) };
-                                nextToken = end;
-                                nextArgBase = end + 1;
+                                if (!stream.atEnd()) {
+                                    var group = stream.mathGroup() orelse return error.ExpectedMathGroup;
+                                    const groupValue = try eval(&group, state, next);
+                                    accNext = Value{ .string = try state.concat(acc.?, groupValue) };
+                                } else {
+                                    accNext = Value{ .string = try state.concat(acc.?, next.?) };
+                                }
                             }
                         },
                         else => {},
@@ -144,14 +140,14 @@ fn eval(current: *const Token, rest: []const Token, state: *State, acc: ?Value) 
         }
     }
 
-    if (rest.len == 0 or nextToken >= rest.len) {
+    if (stream.atEnd()) {
         if (accNext) |output| {
             return output;
         }
 
         return error.WhatTheFuck;
     }
-    return eval(&rest[nextToken], rest[nextArgBase..], state, accNext);
+    return eval(stream, state, accNext);
 }
 
 fn toValue(token: *const Token, state: *State) ?Value {
@@ -181,3 +177,78 @@ fn doMathOp(op: Operator, a: f64, b: f64) ?f64 {
         else => null,
     };
 }
+
+pub const TokenStream = struct {
+    slice: []const Token,
+    cursor: usize,
+
+    const Self = @This();
+
+    pub fn init(slice: []const Token) TokenStream {
+        return .{
+            .slice = slice,
+            .cursor = 0,
+        };
+    }
+
+    //XXX Must be called or subsequent executions of the same statement will be wonky
+    fn reset(self: *Self) void {
+        self.cursor = 0;
+    }
+
+    fn atEnd(self: *Self) bool {
+        return self.cursor >= self.slice.len;
+    }
+
+    fn peek(self: *Self) ?*const Token {
+        if (self.atEnd()) return null;
+        return &self.slice[self.cursor];
+    }
+
+    fn pop(self: *Self) ?*const Token {
+        if (self.atEnd()) return null;
+        const current = self.peek();
+        self.cursor += 1;
+        return current;
+    }
+
+    fn consumeKeyword(self: *Self, kw: Keyword) !void {
+        if (self.atEnd()) return error.EndOfTokens;
+        const tok = self.peek();
+        if (tok == null or tok.?.* != .keyword or tok.?.*.keyword != kw) return error.ExpectedKeyword;
+        self.cursor += 1;
+    }
+
+    fn consumeIdent(self: *Self) ![]const u8 {
+        if (self.atEnd()) return error.EndOfTokens;
+        const tok = self.peek();
+        if (tok == null or tok.?.* != .ident) return error.ExpectedIdent;
+        self.cursor += 1;
+        return tok.?.ident;
+    }
+
+    fn consumeOp(self: *Self, op: Operator) !void {
+        if (self.atEnd()) return error.EndOfTokens;
+        const tok = self.peek();
+        if (tok == null or tok.?.* != .operator or tok.?.*.operator != op) return error.ExpectedOperator;
+        self.cursor += 1;
+    }
+
+    fn mathGroup(self: *Self) ?TokenStream {
+        if (self.atEnd()) return null;
+        const start = self.cursor;
+
+        while (!self.atEnd()) : (self.cursor += 1) {
+            const current = self.peek();
+            switch (current.?.*) {
+                .number, .ident => continue,
+                .operator => |op| if (op != .Comma) continue,
+                else => break,
+            }
+        }
+
+        const subslice = self.slice[start..self.cursor];
+        self.cursor += 1;
+        return TokenStream.init(subslice);
+    }
+};

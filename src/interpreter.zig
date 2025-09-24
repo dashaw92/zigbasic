@@ -6,6 +6,7 @@ const Lexer = @import("lexer.zig");
 const State = @import("state.zig");
 const Value = State.Value;
 const Statement = @import("statement.zig");
+const TokenStream = Statement.TokenStream;
 
 const Interpreter = @This();
 
@@ -60,7 +61,7 @@ fn buildStatements(self: *Interpreter) !void {
             .newline => {
                 try self.program.append(self.alloc, .{
                     .line = lineNumber,
-                    .tokens = self.lexer.tokens.items[start..end],
+                    .stream = TokenStream.init(self.lexer.tokens.items[start..end]),
                 });
 
                 start = end + 1;
@@ -87,7 +88,7 @@ pub fn run(self: *Interpreter) !void {
         try self.program.items[i].exec(&self.state);
 
         if (self.state.jumpBack) |target| {
-            i = lineToIdx.get(target).?;
+            i = lineToIdx.get(target) orelse return error.InvalidLineTarget;
             // std.log.info("{} ({})", .{ i, self.program.items[i] });
             self.state.jumpBack = null;
             continue;
