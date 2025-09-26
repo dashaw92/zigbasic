@@ -56,6 +56,10 @@ pub fn isHalted(self: *State) bool {
     return self.halt;
 }
 
+pub fn clearLoops(self: *State) void {
+    while (self.popJump()) |_| {}
+}
+
 pub fn concat(self: *State, val1: Value, val2: Value) ![]const u8 {
     const val1str = try val1.toString(&self.alloc);
     const val2str = try val2.toString(&self.alloc);

@@ -3,11 +3,12 @@ const Interpreter = @import("interpreter.zig");
 
 const src =
     \\FOR I=1 TO 10
-    \\PRINT "I = ", I, "!"
-    \\IF I > 3 THEN 5
+    \\X = I * 2
+    \\PRINT "I = ", I, " and X = ", X, "!"
+    \\IF I > 3 THEN 6
     \\NEXT I
     \\END
-    \\PRINT "If works!"
+    \\PRINT "!"
     \\GOTO 0
 ;
 

@@ -20,6 +20,11 @@ pub fn exec(self: *const Statement, state: *State) !void {
     stream.reset();
     const command = stream.pop().?;
     switch (command.*) {
+        .ident => |id| {
+            try stream.consumeOp(.Equal);
+            const value = evalSubslice(&stream, state) orelse return error.AssignmentError;
+            try state.set(id, value);
+        },
         .keyword => |kw| switch (kw) {
             .Print => {
                 const value = try eval(&stream, state, null);
@@ -77,6 +82,7 @@ pub fn exec(self: *const Statement, state: *State) !void {
             .Goto => {
                 const target = evalSubslice(&stream, state) orelse return error.GotoBadJump;
                 state.jumpBack = @intFromFloat(target.number);
+                state.clearLoops();
             },
             .If => {
                 const cond = evalSubslice(&stream, state) orelse return error.IfMissingCondition;
@@ -84,6 +90,7 @@ pub fn exec(self: *const Statement, state: *State) !void {
                 const target = evalSubslice(&stream, state) orelse return error.IfMissingTarget;
                 if (floatEq(cond.number, 1.0)) {
                     state.jumpBack = @intFromFloat(target.number);
+                    state.clearLoops();
                 }
             },
             .End => {
@@ -120,30 +127,29 @@ fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
     } else {
         //Value is present in accumulator so normal parsing occurs
         switch (stream.pop().?.*) {
-            .operator => |op| {
-                const next = toValue(stream.pop().?, state);
+            .operator => |op| switch (op) {
+                .Comma => {
+                    const next = toValue(stream.pop().?, state);
+                    if (acc == null or acc.? != Value.string or next == null) return error.SyntaxErrorComma;
 
-                if (acc != null and acc.? == .number and next != null and next.? == .number) {
-                    if (doMathOp(op, acc.?.number, next.?.number)) |result| {
-                        accNext = Value{ .number = result };
+                    if (next.? == .string) {
+                        accNext = Value{ .string = try state.concat(acc.?, next.?) };
+                    } else {
+                        //because next is taken via pop(), but next is part of the sub-statement
+                        stream.rewind(1);
+                        const group = evalSubslice(stream, state).?;
+                        accNext = Value{ .string = try state.concat(acc.?, group) };
                     }
-                } else {
-                    switch (op) {
-                        .Comma => {
-                            if (acc == null or acc.? != Value.string or next == null) return error.SyntaxErrorComma;
+                },
+                else => {
+                    const next = toValue(stream.pop().?, state);
 
-                            if (next.? == .string) {
-                                accNext = Value{ .string = try state.concat(acc.?, next.?) };
-                            } else {
-                                //because next is taken via pop(), but next is part of the sub-statement
-                                stream.rewind(1);
-                                const group = evalSubslice(stream, state).?;
-                                accNext = Value{ .string = try state.concat(acc.?, group) };
-                            }
-                        },
-                        else => {},
+                    if (acc != null and acc.? == .number and next != null and next.? == .number) {
+                        if (doMathOp(op, acc.?.number, next.?.number)) |result| {
+                            accNext = Value{ .number = result };
+                        }
                     }
-                }
+                },
             },
             else => {},
         }
