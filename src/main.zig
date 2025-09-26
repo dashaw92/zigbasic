@@ -2,10 +2,10 @@ const std = @import("std");
 const Interpreter = @import("interpreter.zig");
 
 const src =
-    \\X = 2 + 3 * 2
-    \\PRINT X
-    \\X = 2 + (3 * (1 + 1))
-    \\PRINT X
+    \\Y = 0
+    \\IF Y >= (1 - 1) THEN (2 + Y + 1) 
+    \\END
+    \\PRINT "Y + 2 > 1 :::: ", "Hello", 2 * 2
 ;
 
 pub fn main() !void {

@@ -97,6 +97,11 @@ pub const Value = union(enum) {
     number: f64,
     string: []const u8,
 
+    //My BASIC implementation considers booleans to be 1 for true, all else for false.
+    //I dislike the C-ism of "anything non-0 is true"
+    pub const TRUE: Value = Value{ .number = 1 };
+    pub const FALSE: Value = Value{ .number = 0 };
+
     pub fn toString(self: *const Value, alloc: *Alloc) ![]const u8 {
         return switch (self.*) {
             .number => |num| std.fmt.allocPrint(alloc.*, "{}", .{num}),

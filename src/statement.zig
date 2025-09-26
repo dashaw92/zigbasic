@@ -20,12 +20,15 @@ pub fn exec(self: *const Statement, state: *State) !void {
     stream.reset();
     const command = stream.pop().?;
     switch (command.*) {
+        //Variable assignment
+        //X = (expression)
         .ident => |id| {
-            try stream.consumeOp(.Equal);
+            stream.consumeOp(.Equal) catch return error.AssignmentExpectedEqual;
             const value = evalSubslice(&stream, state) orelse return error.AssignmentError;
             try state.set(id, value);
         },
         .keyword => |kw| switch (kw) {
+            //PRINT (expression)
             .Print => {
                 const value = try eval(&stream, state, null);
                 try switch (value) {
@@ -34,6 +37,7 @@ pub fn exec(self: *const Statement, state: *State) !void {
                 };
                 try writer.interface.print("\n", .{});
             },
+            //FOR (ident) = (expression) TO (expression) [STEP (expression)]
             .For => {
                 if (state.peekJump() != null and state.peekJump().?.targetLine == self.line) return;
 
@@ -62,6 +66,10 @@ pub fn exec(self: *const Statement, state: *State) !void {
                     .stop = endRange.number,
                 });
             },
+            //NEXT (ident)
+            //If the ident provided doesn't match the most recent loop's ident, the
+            //NEXT is mismatched and incorrect. For any given FOR loop, the matching NEXT
+            //statement must be the first NEXT encountered following it.
             .Next => {
                 const ident = stream.consumeIdent() catch return error.NextMissingIdent;
                 const loop = state.peekJump();
@@ -79,20 +87,27 @@ pub fn exec(self: *const Statement, state: *State) !void {
                     state.jumpBack = loop.?.targetLine;
                 }
             },
+            //GOTO (expression)
+            //Unlike NEXT, this also clears loop states. Not sure why, but it seems to work out.
+            //IF is also similar in this.
             .Goto => {
                 const target = evalSubslice(&stream, state) orelse return error.GotoBadJump;
                 state.jumpBack = @intFromFloat(target.number);
                 state.clearLoops();
             },
+            //IF (expr. A) THEN (expr. B)
+            //If expr. A is approx. equal to Value.TRUE (1.0), jump to the line evaluated from expr. B.
+            //Could implement an optional ELSE clause, but I don't think it's needed because control flow jumps past the next line anyways.
             .If => {
                 const cond = evalSubslice(&stream, state) orelse return error.IfMissingCondition;
-                try stream.consumeKeyword(.Then);
+                stream.consumeKeyword(.Then) catch return error.IfMissingThen;
                 const target = evalSubslice(&stream, state) orelse return error.IfMissingTarget;
-                if (floatEq(cond.number, 1.0)) {
+                if (floatEq(cond.number, Value.TRUE.number)) {
                     state.jumpBack = @intFromFloat(target.number);
                     state.clearLoops();
                 }
             },
+            //Immediately ends intepretation unconditionally.
             .End => {
                 state.setHalted();
             },
@@ -105,7 +120,7 @@ pub fn exec(self: *const Statement, state: *State) !void {
 }
 
 fn evalSubslice(stream: *TokenStream, state: *State) ?Value {
-    var subslice = stream.mathGroup() orelse return null;
+    var subslice = stream.subGroup() orelse return null;
     return eval(&subslice, state, null) catch return null;
 }
 
@@ -114,6 +129,8 @@ fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
     var accNext: ?Value = null;
 
     switch (stream.pop().?.*) {
+        //If the next token is a lit (number, ident, string) and acc is not null, syntax error.
+        //This is only a valid token when starting a new statement as it's an implicit a push operation onto the stack.
         .number => |n| {
             if (acc != null) return error.UnexpectedNumberLit;
             accNext = Value{ .number = n };
@@ -127,28 +144,35 @@ fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
             accNext = Value{ .string = str };
         },
         .operator => |op| switch (op) {
+            //Comma acts as the string concatenation operator
+            //state.concat() calls toString on both provided values
+            //so it doesn't matter if acc is not a string
             .Comma => {
-                const next = toValue(stream.pop().?, state);
-                if (acc == null or acc.? != Value.string or next == null) return error.SyntaxErrorComma;
+                //can't concat null
+                if (acc == null) return error.SyntaxErrorComma;
 
-                if (next.? == .string) {
-                    accNext = Value{ .string = try state.concat(acc.?, next.?) };
-                } else {
-                    //because next is taken via pop(), but next is part of the sub-statement
-                    stream.rewind(1);
-                    const group = evalSubslice(stream, state).?;
-                    accNext = Value{ .string = try state.concat(acc.?, group) };
-                }
+                const group = evalSubslice(stream, state) orelse return error.CommaMissingValue;
+                accNext = Value{ .string = try state.concat(acc.?, group) };
             },
+            //Parentheses can appear in evaluation in two positions:
+            //(A + B) * (C + D)
+            //^
+            // we're here
             .LeftParen => {
                 var group = stream.groupParens() orelse return error.MismatchedParenthesis;
                 accNext = try eval(&group, state, null);
             },
             else => {
                 switch (stream.pop().?.*) {
+                    //... but if a '(' appears here...
+                    //(A + B) * (C + D)
+                    //        ^
+                    //        now we're here, with '(' as the next token.
                     .operator => |opNext| if (opNext == .LeftParen) {
                         var group = stream.groupParens() orelse return error.MismatchedParenthesis;
                         const groupVal = try eval(&group, state, null);
+                        //I think only malformed BASIC can bypass this, and I only care about the
+                        //interpreter working on proper code.
                         if (doMathOp(op, acc.?.number, groupVal.number)) |result| {
                             accNext = Value{ .number = result };
                         }
@@ -172,8 +196,9 @@ fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
             return output;
         }
 
-        return error.WhatTheFuck;
+        return error.EvaluatedToNothing;
     }
+
     return eval(stream, state, accNext);
 }
 
@@ -189,9 +214,9 @@ fn toValue(token: *const Token, state: *State) ?Value {
 fn isTrue(value: ?Value, state: *State) bool {
     if (value) |v| {
         return switch (v) {
-            .number => |n| floatEq(n, 1),
+            .number => |n| floatEq(n, Value.TRUE),
             .ident => |id| if (state.valueOf(id)) |idValue| switch (idValue) {
-                .number => |n| floatEq(n, 1),
+                .number => |n| floatEq(n, Value.TRUE),
                 else => false,
             },
             else => false,
@@ -214,12 +239,12 @@ fn doMathOp(op: Operator, a: f64, b: f64) ?f64 {
         .Div => a / b,
         .Mod => @mod(a, b),
         .Pow => std.math.pow(f64, a, b),
-        .DoubleEq => if (floatEq(a, b)) 1 else 0,
-        .NotEq => if (!floatEq(a, b)) 1 else 0,
-        .Leq => if (a <= b) 1 else 0,
-        .Geq => if (a >= b) 1 else 0,
-        .Lt => if (a < b) 1 else 0,
-        .Gt => if (a > b) 1 else 0,
+        .DoubleEq => if (floatEq(a, b)) Value.TRUE.number else Value.FALSE.number,
+        .NotEq => if (!floatEq(a, b)) Value.TRUE.number else Value.FALSE.number,
+        .Leq => if (a <= b) Value.TRUE.number else Value.FALSE.number,
+        .Geq => if (a >= b) Value.TRUE.number else Value.FALSE.number,
+        .Lt => if (a < b) Value.TRUE.number else Value.FALSE.number,
+        .Gt => if (a > b) Value.TRUE.number else Value.FALSE.number,
         else => null,
     };
 }
@@ -242,15 +267,18 @@ pub const TokenStream = struct {
         self.cursor = 0;
     }
 
+    //Is the cursor at the end of the token slice?
     fn atEnd(self: *Self) bool {
         return self.cursor >= self.slice.len;
     }
 
+    //Return the next token but don't increment the cursor
     fn peek(self: *Self) ?*const Token {
         if (self.atEnd()) return null;
         return &self.slice[self.cursor];
     }
 
+    //Return the next token and increment the cursor
     fn pop(self: *Self) ?*const Token {
         if (self.atEnd()) return null;
         const current = self.peek();
@@ -258,11 +286,8 @@ pub const TokenStream = struct {
         return current;
     }
 
-    fn rewind(self: *Self, amount: usize) void {
-        if (self.cursor < amount) return;
-        self.cursor -= amount;
-    }
-
+    //If the current token is the provided keyword, consume it.
+    //Else error.
     fn consumeKeyword(self: *Self, kw: Keyword) !void {
         if (self.atEnd()) return error.EndOfTokens;
         const tok = self.peek();
@@ -270,6 +295,8 @@ pub const TokenStream = struct {
         self.cursor += 1;
     }
 
+    //If the current token is an ident, consume and return it.
+    //Else error.
     fn consumeIdent(self: *Self) ![]const u8 {
         if (self.atEnd()) return error.EndOfTokens;
         const tok = self.peek();
@@ -278,6 +305,8 @@ pub const TokenStream = struct {
         return tok.?.ident;
     }
 
+    //If the current token is the provided operator, consume it.
+    //Else error.
     fn consumeOp(self: *Self, op: Operator) !void {
         if (self.atEnd()) return error.EndOfTokens;
         const tok = self.peek();
@@ -285,7 +314,11 @@ pub const TokenStream = struct {
         self.cursor += 1;
     }
 
-    fn mathGroup(self: *Self) ?TokenStream {
+    //Returns a child TokenStream of all tokens up to the next boundary token, i.e. the next keyword:
+    //IF A + B * C < D THEN
+    //   ^^^^^^^^^^^^^ ^^^^
+    //   subGroup      boundary token
+    fn subGroup(self: *Self) ?TokenStream {
         if (self.atEnd()) return null;
         const start = self.cursor;
 
@@ -293,7 +326,6 @@ pub const TokenStream = struct {
             const current = self.peek();
             switch (current.?.*) {
                 .keyword => break,
-                .operator => |op| if (op == .Comma) break,
                 else => continue,
             }
         }
@@ -302,10 +334,17 @@ pub const TokenStream = struct {
         return TokenStream.init(subslice);
     }
 
+    //Return a child TokenStream containing all tokens between
+    //a current parenthesis group. This is separate from subGroup because
+    //subGroup is a generally applicable function used wherever statements can be
+    //nested, whereas parentheses are optionally included in said statements.
+    //This function should only be called when the current token is a LeftParen.
     fn groupParens(self: *Self) ?TokenStream {
         if (self.atEnd()) return null;
+        //If the current token is (, consume it
         _ = self.consumeOp(.LeftParen) catch {};
         const start = self.cursor;
+        //Track the depth of parenths to ensure nesting works properly
         var depth: usize = 0;
         while (!self.atEnd()) : (self.cursor += 1) {
             const current = self.peek();
@@ -322,8 +361,12 @@ pub const TokenStream = struct {
             }
         }
 
+        //If depth isn't 0 at this point, the stream ran out of tokens before finding
+        //the matching right parenthesis.
         if (depth != 0) return null;
+        //Does not contain the left or right parentheses
         const slice = self.slice[start..self.cursor];
+        //Consume the right parenthesis
         _ = self.consumeOp(.RightParen) catch {};
         return TokenStream.init(slice);
     }
