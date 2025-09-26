@@ -14,6 +14,10 @@ strings: std.ArrayList([]u8),
 jumps: std.ArrayList(LoopState),
 //Flag for programs to immediately halt interpretation via END keyword.
 halt: bool,
+//1 KB of emulated memory.
+memory: [1024]Value,
+//Extensions registered prior to execution enabling peek/poke to be used for real IO.
+extensions: std.ArrayList(MemoryExtension),
 alloc: Alloc,
 
 pub fn init(alloc: *const Alloc) !State {
@@ -22,6 +26,8 @@ pub fn init(alloc: *const Alloc) !State {
         .symbols = Map(Value).init(alloc.*),
         .strings = try std.ArrayList([]u8).initCapacity(alloc.*, 512),
         .jumps = try std.ArrayList(LoopState).initCapacity(alloc.*, 1024),
+        .memory = [_]Value{Value{ .number = 0 }} ** (1024),
+        .extensions = try std.ArrayList(MemoryExtension).initCapacity(alloc.*, 1024),
         .halt = false,
         .alloc = alloc.*,
     };
@@ -33,7 +39,15 @@ pub fn deinit(self: *State) void {
     }
     self.jumps.deinit(self.alloc);
     self.strings.deinit(self.alloc);
+    self.extensions.deinit(self.alloc);
     self.symbols.deinit();
+}
+
+pub fn registerExtension(self: *State, extension: MemoryExtension) !void {
+    for (self.extensions.items) |other| {
+        if (other.address == extension.address) return error.AddressAlreadyInUse;
+    }
+    try self.extensions.append(self.alloc, extension);
 }
 
 pub fn pushJump(self: *State, loop: LoopState) !void {
@@ -58,6 +72,29 @@ pub fn isHalted(self: *State) bool {
 
 pub fn clearLoops(self: *State) void {
     while (self.popJump()) |_| {}
+}
+
+pub fn memPeek(self: *State, addr: usize) !Value {
+    if (addr >= self.memory.len) return error.PeekOutOfBounds;
+
+    for (self.extensions.items) |ext| {
+        if (addr == ext.address) {
+            return ext.getValue(addr);
+        }
+    }
+
+    return self.memory[addr];
+}
+
+pub fn memPoke(self: *State, addr: usize, value: Value) !void {
+    if (addr >= self.memory.len) return error.PokeOutOfBounds;
+
+    for (self.extensions.items) |ext| {
+        if (addr == ext.address) {
+            ext.setValue(addr, value);
+        }
+    }
+    self.memory[addr] = value;
 }
 
 pub fn concat(self: *State, val1: Value, val2: Value) ![]const u8 {
@@ -116,4 +153,10 @@ pub const LoopState = struct {
     step: f64,
     start: f64,
     stop: f64,
+};
+
+pub const MemoryExtension = struct {
+    address: usize,
+    getValue: *const fn (usize) Value,
+    setValue: *const fn (usize, Value) void,
 };

@@ -111,6 +111,24 @@ pub fn exec(self: *const Statement, state: *State) !void {
             .End => {
                 state.setHalted();
             },
+            //PEEK (expression) TO (ident)
+            //value returned is stored in ident
+            .Peek => {
+                const value = evalSubslice(&stream, state) orelse return error.PeekInvalidExpression;
+                stream.consumeKeyword(.To) catch return error.PeekMissingTo;
+                const ident = stream.consumeIdent() catch return error.PeekMissingIdent;
+
+                const memory = state.memPeek(@intFromFloat(value.number)) catch return error.PeekMemoryError;
+                try state.set(ident, memory);
+            },
+            //POKE (expr. A) TO (expr. B)
+            //memory at (expr. B) is set to (expr. A)
+            .Poke => {
+                const value = evalSubslice(&stream, state) orelse return error.PokeMissingValue;
+                stream.consumeKeyword(.To) catch return error.PokeMissingTo;
+                const target = evalSubslice(&stream, state) orelse return error.PokeMissingTarget;
+                state.memPoke(@intFromFloat(target.number), value) catch return error.PokeMemoryError;
+            },
             else => {},
         },
         else => {},

@@ -35,6 +35,10 @@ pub fn init(alloc: *const Alloc, src: []const u8) !Interpreter {
     return self;
 }
 
+pub fn getState(self: *Interpreter) *State {
+    return &self.state;
+}
+
 pub fn deinit(self: *Interpreter) void {
     self.state.deinit();
     self.program.deinit(self.alloc);
