@@ -154,8 +154,9 @@ fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
                         }
                     },
                     else => |n| {
-                        if (acc != null and acc.? == .number and n == .number) {
-                            if (doMathOp(op, acc.?.number, n.number)) |result| {
+                        const value = toValue(&n, state);
+                        if (acc != null and acc.? == .number and value != null and value.? == .number) {
+                            if (doMathOp(op, acc.?.number, value.?.number)) |result| {
                                 accNext = Value{ .number = result };
                             }
                         }
