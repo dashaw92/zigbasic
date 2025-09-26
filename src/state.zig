@@ -12,6 +12,8 @@ symbols: Map(Value),
 strings: std.ArrayList([]u8),
 //Current stack of loops in the program
 jumps: std.ArrayList(LoopState),
+//Flag for programs to immediately halt interpretation via END keyword.
+halt: bool,
 alloc: Alloc,
 
 pub fn init(alloc: *const Alloc) !State {
@@ -20,6 +22,7 @@ pub fn init(alloc: *const Alloc) !State {
         .symbols = Map(Value).init(alloc.*),
         .strings = try std.ArrayList([]u8).initCapacity(alloc.*, 512),
         .jumps = try std.ArrayList(LoopState).initCapacity(alloc.*, 1024),
+        .halt = false,
         .alloc = alloc.*,
     };
 }
@@ -43,6 +46,14 @@ pub fn peekJump(self: *State) ?LoopState {
 
 pub fn popJump(self: *State) ?LoopState {
     return self.jumps.pop();
+}
+
+pub fn setHalted(self: *State) void {
+    self.halt = true;
+}
+
+pub fn isHalted(self: *State) bool {
+    return self.halt;
 }
 
 pub fn concat(self: *State, val1: Value, val2: Value) ![]const u8 {

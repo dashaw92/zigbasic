@@ -2,9 +2,13 @@ const std = @import("std");
 const Interpreter = @import("interpreter.zig");
 
 const src =
-    \\FOR I=1 TO 10 STEP 1.2
-    \\PRINT "I = ", I
+    \\FOR I=1 TO 10
+    \\PRINT "I = ", I, "!"
+    \\IF I > 3 THEN 5
     \\NEXT I
+    \\END
+    \\PRINT "If works!"
+    \\GOTO 0
 ;
 
 pub fn main() !void {

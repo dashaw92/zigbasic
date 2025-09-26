@@ -87,6 +87,8 @@ pub fn run(self: *Interpreter) !void {
     while (i <= maxIdx) {
         try self.program.items[i].exec(&self.state);
 
+        if (self.state.isHalted()) break;
+
         if (self.state.jumpBack) |target| {
             i = lineToIdx.get(target) orelse return error.InvalidLineTarget;
             // std.log.info("{} ({})", .{ i, self.program.items[i] });
@@ -96,4 +98,6 @@ pub fn run(self: *Interpreter) !void {
 
         i += 1;
     }
+
+    std.log.info("*** Finished ***", .{});
 }

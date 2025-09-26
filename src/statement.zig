@@ -35,28 +35,26 @@ pub fn exec(self: *const Statement, state: *State) !void {
                 const ident = stream.consumeIdent() catch return error.ForMissingIdent;
                 stream.consumeOp(.Equal) catch return error.ForAssignmentError;
 
-                const startRange = toValue(stream.pop().?, state);
+                const startRange = evalSubslice(&stream, state) orelse return error.ForInvalidStartRange;
                 stream.consumeKeyword(.To) catch return error.ForMissingTo;
-                const endRange = toValue(stream.pop().?, state);
+                const endRange = evalSubslice(&stream, state) orelse return error.ForInvalidStopRange;
 
-                if (startRange == null or endRange == null or startRange.? != .number or endRange.? != .number) return error.ForInvalidRange;
+                if (startRange != .number or endRange != .number) return error.ForInvalidRange;
 
                 var step: f64 = 1;
                 const nextTok = stream.pop();
                 if (nextTok != null and nextTok.?.* == .keyword and nextTok.?.*.keyword == .Step) {
-                    const providedStep = toValue(stream.pop() orelse return error.ForMissingStep, state);
-                    if (providedStep == null or providedStep.? == .string) return error.ForInvalidStep;
-
-                    step = providedStep.?.number;
+                    const providedStep = evalSubslice(&stream, state) orelse return error.ForInvalidStep;
+                    step = providedStep.number;
                 }
 
-                try state.set(ident, startRange.?);
+                try state.set(ident, startRange);
                 try state.pushJump(.{
                     .targetLine = self.line,
                     .ident = ident,
                     .step = step,
-                    .start = startRange.?.number,
-                    .stop = endRange.?.number,
+                    .start = startRange.number,
+                    .stop = endRange.number,
                 });
             },
             .Next => {
@@ -77,10 +75,19 @@ pub fn exec(self: *const Statement, state: *State) !void {
                 }
             },
             .Goto => {
-                const target = toValue(stream.pop().?, state);
-                if (target == null or target.? != .number) return error.GotoBadJump;
-
-                state.jumpBack = @intFromFloat(target.?.number);
+                const target = evalSubslice(&stream, state) orelse return error.GotoBadJump;
+                state.jumpBack = @intFromFloat(target.number);
+            },
+            .If => {
+                const cond = evalSubslice(&stream, state) orelse return error.IfMissingCondition;
+                try stream.consumeKeyword(.Then);
+                const target = evalSubslice(&stream, state) orelse return error.IfMissingTarget;
+                if (floatEq(cond.number, 1.0)) {
+                    state.jumpBack = @intFromFloat(target.number);
+                }
+            },
+            .End => {
+                state.setHalted();
             },
             else => {},
         },
@@ -88,6 +95,11 @@ pub fn exec(self: *const Statement, state: *State) !void {
     }
 
     try writer.interface.flush();
+}
+
+fn evalSubslice(stream: *TokenStream, state: *State) ?Value {
+    var subslice = stream.mathGroup() orelse return null;
+    return eval(&subslice, state, null) catch return null;
 }
 
 fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
@@ -106,7 +118,7 @@ fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
             return error.SyntaxError;
         }
     } else {
-        //Value is present in accumulator, so normal parsing occurs
+        //Value is present in accumulator so normal parsing occurs
         switch (stream.pop().?.*) {
             .operator => |op| {
                 const next = toValue(stream.pop().?, state);
@@ -123,13 +135,10 @@ fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
                             if (next.? == .string) {
                                 accNext = Value{ .string = try state.concat(acc.?, next.?) };
                             } else {
-                                if (!stream.atEnd()) {
-                                    var group = stream.mathGroup() orelse return error.ExpectedMathGroup;
-                                    const groupValue = try eval(&group, state, next);
-                                    accNext = Value{ .string = try state.concat(acc.?, groupValue) };
-                                } else {
-                                    accNext = Value{ .string = try state.concat(acc.?, next.?) };
-                                }
+                                //because next is taken via pop(), but next is part of the sub-statement
+                                stream.rewind(1);
+                                const group = evalSubslice(stream, state).?;
+                                accNext = Value{ .string = try state.concat(acc.?, group) };
                             }
                         },
                         else => {},
@@ -159,8 +168,27 @@ fn toValue(token: *const Token, state: *State) ?Value {
     };
 }
 
-fn doMathOp(op: Operator, a: f64, b: f64) ?f64 {
+fn isTrue(value: ?Value, state: *State) bool {
+    if (value) |v| {
+        return switch (v) {
+            .number => |n| floatEq(n, 1),
+            .ident => |id| if (state.valueOf(id)) |idValue| switch (idValue) {
+                .number => |n| floatEq(n, 1),
+                else => false,
+            },
+            else => false,
+        };
+    }
+
+    return false;
+}
+
+fn floatEq(a: f64, b: f64) bool {
     const eps = std.math.floatEps(f64);
+    return @abs(a - b) <= eps;
+}
+
+fn doMathOp(op: Operator, a: f64, b: f64) ?f64 {
     return switch (op) {
         .Plus => a + b,
         .Sub => a - b,
@@ -168,8 +196,8 @@ fn doMathOp(op: Operator, a: f64, b: f64) ?f64 {
         .Div => a / b,
         .Mod => @mod(a, b),
         .Pow => std.math.pow(f64, a, b),
-        .DoubleEq => if (@abs(a - b) < eps) 1 else 0,
-        .NotEq => if (@abs(a - b) > eps) 1 else 0,
+        .DoubleEq => if (floatEq(a, b)) 1 else 0,
+        .NotEq => if (!floatEq(a, b)) 1 else 0,
         .Leq => if (a <= b) 1 else 0,
         .Geq => if (a >= b) 1 else 0,
         .Lt => if (a < b) 1 else 0,
@@ -212,6 +240,11 @@ pub const TokenStream = struct {
         return current;
     }
 
+    fn rewind(self: *Self, amount: usize) void {
+        if (self.cursor < amount) return;
+        self.cursor -= amount;
+    }
+
     fn consumeKeyword(self: *Self, kw: Keyword) !void {
         if (self.atEnd()) return error.EndOfTokens;
         const tok = self.peek();
@@ -241,14 +274,13 @@ pub const TokenStream = struct {
         while (!self.atEnd()) : (self.cursor += 1) {
             const current = self.peek();
             switch (current.?.*) {
-                .number, .ident => continue,
-                .operator => |op| if (op != .Comma) continue,
-                else => break,
+                .keyword => break,
+                .operator => |op| if (op == .Comma) break,
+                else => continue,
             }
         }
 
         const subslice = self.slice[start..self.cursor];
-        self.cursor += 1;
         return TokenStream.init(subslice);
     }
 };
