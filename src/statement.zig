@@ -113,46 +113,57 @@ fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
     //State of the accumulator after running this step of the recursion
     var accNext: ?Value = null;
 
-    //If there's nothing currently on the "stack", treat literals differently and push them directly
-    //into the accumulator.
-    if (acc == null) {
-        accNext = toValue(stream.pop().?, state);
-        //Any null here means the current token is a keyword or operator
-        //TODO: Have yet to decide how to handle negatives- should the lexer handle this?
-        //If not, this is where it should be checked and handled.
-        if (accNext == null) {
-            //TODO: These errors will come back to bite me in the ass.
-            return error.SyntaxError;
-        }
-    } else {
-        //Value is present in accumulator so normal parsing occurs
-        switch (stream.pop().?.*) {
-            .operator => |op| switch (op) {
-                .Comma => {
-                    const next = toValue(stream.pop().?, state);
-                    if (acc == null or acc.? != Value.string or next == null) return error.SyntaxErrorComma;
+    switch (stream.pop().?.*) {
+        .number => |n| {
+            if (acc != null) return error.UnexpectedNumberLit;
+            accNext = Value{ .number = n };
+        },
+        .ident => |id| {
+            if (acc != null) return error.UnexpectedIdent;
+            accNext = state.valueOf(id);
+        },
+        .string => |str| {
+            if (acc != null) return error.UnexpectedStringLit;
+            accNext = Value{ .string = str };
+        },
+        .operator => |op| switch (op) {
+            .Comma => {
+                const next = toValue(stream.pop().?, state);
+                if (acc == null or acc.? != Value.string or next == null) return error.SyntaxErrorComma;
 
-                    if (next.? == .string) {
-                        accNext = Value{ .string = try state.concat(acc.?, next.?) };
-                    } else {
-                        //because next is taken via pop(), but next is part of the sub-statement
-                        stream.rewind(1);
-                        const group = evalSubslice(stream, state).?;
-                        accNext = Value{ .string = try state.concat(acc.?, group) };
-                    }
-                },
-                else => {
-                    const next = toValue(stream.pop().?, state);
-
-                    if (acc != null and acc.? == .number and next != null and next.? == .number) {
-                        if (doMathOp(op, acc.?.number, next.?.number)) |result| {
+                if (next.? == .string) {
+                    accNext = Value{ .string = try state.concat(acc.?, next.?) };
+                } else {
+                    //because next is taken via pop(), but next is part of the sub-statement
+                    stream.rewind(1);
+                    const group = evalSubslice(stream, state).?;
+                    accNext = Value{ .string = try state.concat(acc.?, group) };
+                }
+            },
+            .LeftParen => {
+                var group = stream.groupParens() orelse return error.MismatchedParenthesis;
+                accNext = try eval(&group, state, null);
+            },
+            else => {
+                switch (stream.pop().?.*) {
+                    .operator => |opNext| if (opNext == .LeftParen) {
+                        var group = stream.groupParens() orelse return error.MismatchedParenthesis;
+                        const groupVal = try eval(&group, state, null);
+                        if (doMathOp(op, acc.?.number, groupVal.number)) |result| {
                             accNext = Value{ .number = result };
                         }
-                    }
-                },
+                    },
+                    else => |n| {
+                        if (acc != null and acc.? == .number and n == .number) {
+                            if (doMathOp(op, acc.?.number, n.number)) |result| {
+                                accNext = Value{ .number = result };
+                            }
+                        }
+                    },
+                }
             },
-            else => {},
-        }
+        },
+        else => return error.UnexpectedTokenInEval,
     }
 
     if (stream.atEnd()) {
@@ -288,5 +299,31 @@ pub const TokenStream = struct {
 
         const subslice = self.slice[start..self.cursor];
         return TokenStream.init(subslice);
+    }
+
+    fn groupParens(self: *Self) ?TokenStream {
+        if (self.atEnd()) return null;
+        _ = self.consumeOp(.LeftParen) catch {};
+        const start = self.cursor;
+        var depth: usize = 0;
+        while (!self.atEnd()) : (self.cursor += 1) {
+            const current = self.peek();
+            switch (current.?.*) {
+                .operator => |op| switch (op) {
+                    .LeftParen => depth += 1,
+                    .RightParen => {
+                        if (depth == 0) break;
+                        depth -= 1;
+                    },
+                    else => continue,
+                },
+                else => continue,
+            }
+        }
+
+        if (depth != 0) return null;
+        const slice = self.slice[start..self.cursor];
+        _ = self.consumeOp(.RightParen) catch {};
+        return TokenStream.init(slice);
     }
 };

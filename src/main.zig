@@ -2,14 +2,10 @@ const std = @import("std");
 const Interpreter = @import("interpreter.zig");
 
 const src =
-    \\FOR I=1 TO 10
-    \\X = I * 2
-    \\PRINT "I = ", I, " and X = ", X, "!"
-    \\IF I > 3 THEN 6
-    \\NEXT I
-    \\END
-    \\PRINT "!"
-    \\GOTO 0
+    \\X = 2 + 3 * 2
+    \\PRINT X
+    \\X = 2 + (3 * (1 + 1))
+    \\PRINT X
 ;
 
 pub fn main() !void {
