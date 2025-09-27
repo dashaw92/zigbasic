@@ -15,7 +15,7 @@ const Interpreter = @This();
 lexer: Lexer,
 program: List(Statement),
 state: State,
-alloc: std.mem.Allocator,
+alloc: *const std.mem.Allocator,
 
 pub fn init(alloc: *const Alloc, src: []const u8) !Interpreter {
     var lexer = try Lexer.init(src, alloc);
@@ -28,7 +28,7 @@ pub fn init(alloc: *const Alloc, src: []const u8) !Interpreter {
         .lexer = lexer,
         .program = program,
         .state = state,
-        .alloc = alloc.*,
+        .alloc = alloc,
     };
 
     try self.buildStatements();
@@ -41,7 +41,7 @@ pub fn getState(self: *Interpreter) *State {
 
 pub fn deinit(self: *Interpreter) void {
     self.state.deinit();
-    self.program.deinit(self.alloc);
+    self.program.deinit(self.alloc.*);
     self.lexer.deinit();
 }
 
@@ -69,7 +69,7 @@ fn buildStatements(self: *Interpreter) !void {
                     start += 1;
                 }
 
-                try self.program.append(self.alloc, .{
+                try self.program.append(self.alloc.*, .{
                     .line = lineNumber,
                     .stream = TokenStream.init(self.lexer.tokens.items[start..end]),
                 });
@@ -84,7 +84,7 @@ fn buildStatements(self: *Interpreter) !void {
 
 pub fn run(self: *Interpreter) !void {
     var maxIdx: usize = 0;
-    var lineToIdx = std.AutoHashMap(usize, usize).init(self.alloc);
+    var lineToIdx = std.AutoHashMap(usize, usize).init(self.alloc.*);
     defer lineToIdx.deinit();
     for (0.., self.program.items) |i, stmt| {
         try lineToIdx.put(stmt.line, i);

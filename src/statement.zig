@@ -59,7 +59,7 @@ pub fn exec(self: *const Statement, state: *State) !void {
             .Print, .PrintNl => {
                 const newline = kw == .Print;
                 const value = try eval(&stream, state, null);
-                const strRepr = value.toString(&state.alloc) catch return error.FailedToAllocStringRepr;
+                const strRepr = value.toString(state.alloc) catch return error.FailedToAllocStringRepr;
                 try writer.interface.print("{s}", .{strRepr});
                 state.alloc.free(strRepr);
 

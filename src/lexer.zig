@@ -69,27 +69,27 @@ pub const Token = union(enum) {
 source: str,
 pos: usize,
 tokens: std.ArrayList(Token),
-alloc: Alloc,
+alloc: *const Alloc,
 
 pub fn init(source: str, alloc: *const Alloc) !Lexer {
     const tokens = try std.ArrayList(Token).initCapacity(alloc.*, 256);
-    return .{ .source = source, .pos = 0, .tokens = tokens, .alloc = alloc.* };
+    return .{ .source = source, .pos = 0, .tokens = tokens, .alloc = alloc };
 }
 
 pub fn deinit(self: *Lexer) void {
     for (self.tokens.items) |token| {
         switch (token) {
-            .ident => |ident| self.alloc.free(ident),
-            .string => |string| self.alloc.free(string),
+            .ident => |ident| self.alloc.*.free(ident),
+            .string => |string| self.alloc.*.free(string),
             else => {},
         }
     }
-    self.tokens.deinit(self.alloc);
+    self.tokens.deinit(self.alloc.*);
 }
 
 pub fn lex(self: *Lexer) !void {
     while (try self.nextToken()) {}
-    try self.tokens.append(self.alloc, Token.newline);
+    try self.tokens.append(self.alloc.*, Token.newline);
 }
 
 fn isEof(self: *Lexer) bool {
@@ -183,7 +183,7 @@ fn consumeAlpha(self: *Lexer) !Token {
 
     //Once lexing is done, can't assume the provided source code
     //will remain alive.
-    const ownedCopy = try self.alloc.dupe(u8, literal);
+    const ownedCopy = try self.alloc.*.dupe(u8, literal);
     return .{ .ident = ownedCopy };
 }
 
@@ -196,7 +196,7 @@ fn consumeStringLit(self: *Lexer) !Token {
 
     //Once lexing is done, can't assume the provided source code
     //will remain alive.
-    const ownedCopy = try self.alloc.dupe(u8, string);
+    const ownedCopy = try self.alloc.*.dupe(u8, string);
     return .{ .string = ownedCopy };
 }
 
@@ -272,7 +272,7 @@ fn nextToken(self: *Lexer) !bool {
     }
 
     if (try self.consumeWhitespace()) {
-        try self.tokens.append(self.alloc, Token.newline);
+        try self.tokens.append(self.alloc.*, Token.newline);
         return true;
     }
 
@@ -296,6 +296,6 @@ fn nextToken(self: *Lexer) !bool {
             break :block try self.consumeAlpha();
         };
 
-    try self.tokens.append(self.alloc, tok);
+    try self.tokens.append(self.alloc.*, tok);
     return true;
 }

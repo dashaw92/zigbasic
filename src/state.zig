@@ -20,7 +20,7 @@ memory: [1024]Value,
 extensions: std.ArrayList(MemoryExtension),
 //array ID for deinit
 arrays: std.ArrayList(Array),
-alloc: Alloc,
+alloc: *const Alloc,
 
 pub fn init(alloc: *const Alloc) !State {
     return .{
@@ -32,7 +32,7 @@ pub fn init(alloc: *const Alloc) !State {
         .extensions = try std.ArrayList(MemoryExtension).initCapacity(alloc.*, 1024),
         .arrays = try std.ArrayList(Array).initCapacity(alloc.*, 16),
         .halt = false,
-        .alloc = alloc.*,
+        .alloc = alloc,
     };
 }
 
@@ -40,14 +40,14 @@ pub fn deinit(self: *State) void {
     for (self.strings.items) |str| {
         self.alloc.free(str);
     }
-    self.jumps.deinit(self.alloc);
-    self.strings.deinit(self.alloc);
-    self.extensions.deinit(self.alloc);
+    self.jumps.deinit(self.alloc.*);
+    self.strings.deinit(self.alloc.*);
+    self.extensions.deinit(self.alloc.*);
 
     for (self.arrays.items) |arr| {
         self.alloc.free(arr.array);
     }
-    self.arrays.deinit(self.alloc);
+    self.arrays.deinit(self.alloc.*);
     self.symbols.deinit();
 }
 
@@ -59,7 +59,7 @@ pub fn registerExtension(self: *State, extension: MemoryExtension) !void {
 }
 
 pub fn pushJump(self: *State, loop: LoopState) !void {
-    try self.jumps.append(self.alloc, loop);
+    try self.jumps.append(self.alloc.*, loop);
 }
 
 pub fn peekJump(self: *State) ?LoopState {
@@ -106,10 +106,10 @@ pub fn memPoke(self: *State, addr: usize, value: Value) !void {
 }
 
 pub fn concat(self: *State, val1: Value, val2: Value) ![]const u8 {
-    const val1str = try val1.toString(&self.alloc);
-    const val2str = try val2.toString(&self.alloc);
+    const val1str = try val1.toString(self.alloc);
+    const val2str = try val2.toString(self.alloc);
 
-    const output = try std.fmt.allocPrint(self.alloc, "{s}{s}", .{
+    const output = try std.fmt.allocPrint(self.alloc.*, "{s}{s}", .{
         val1str,
         val2str,
     });
@@ -117,19 +117,19 @@ pub fn concat(self: *State, val1: Value, val2: Value) ![]const u8 {
     self.alloc.free(val1str);
     self.alloc.free(val2str);
 
-    try self.strings.append(self.alloc, output);
+    try self.strings.append(self.alloc.*, output);
     return output;
 }
 
 pub fn allocString(self: *State, len: usize) ![]u8 {
     const buf = try self.alloc.alloc(u8, len);
-    try self.strings.append(self.alloc, buf);
+    try self.strings.append(self.alloc.*, buf);
     return buf;
 }
 
 pub fn allocArray(self: *State, dim: usize) !Value {
-    const array = try Array.init(&self.alloc, dim);
-    try self.arrays.append(self.alloc, array);
+    const array = try Array.init(self.alloc, dim);
+    try self.arrays.append(self.alloc.*, array);
     return Value{ .array = array };
 }
 
@@ -155,7 +155,7 @@ pub const Value = union(enum) {
     pub const TRUE: Value = Value{ .number = 1 };
     pub const FALSE: Value = Value{ .number = 0 };
 
-    pub fn toString(self: *const Value, alloc: *Alloc) ![]const u8 {
+    pub fn toString(self: *const Value, alloc: *const Alloc) ![]const u8 {
         return switch (self.*) {
             .number => |num| std.fmt.allocPrint(alloc.*, "{}", .{num}),
             .string => |s| try alloc.dupe(u8, s),
@@ -188,15 +188,13 @@ pub const Value = union(enum) {
 };
 
 const Array = struct {
-    alloc: Alloc,
     array: []Value,
 
-    pub fn init(alloc: *Alloc, len: usize) !Array {
-        const array = try alloc.alloc(Value, len);
+    pub fn init(alloc: *const Alloc, len: usize) !Array {
+        const array = try alloc.*.alloc(Value, len);
         for (0..len) |i| array[i] = Value{ .number = 0 };
 
         return .{
-            .alloc = alloc.*,
             .array = array,
         };
     }
