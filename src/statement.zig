@@ -3,6 +3,7 @@ const std = @import("std");
 const Lexer = @import("lexer.zig");
 const Keyword = Lexer.Keyword;
 const Operator = Lexer.Operator;
+const Function = Lexer.Function;
 const Token = Lexer.Token;
 const State = @import("state.zig");
 const Value = State.Value;
@@ -29,13 +30,16 @@ pub fn exec(self: *const Statement, state: *State) !void {
         },
         .keyword => |kw| switch (kw) {
             //PRINT (expression)
-            .Print => {
+            .Print, .PrintNl => {
+                const newline = kw == .Print;
                 const value = try eval(&stream, state, null);
                 try switch (value) {
                     .number => |n| writer.interface.print("{}", .{n}),
                     .string => |s| writer.interface.print("{s}", .{s}),
                 };
-                try writer.interface.print("\n", .{});
+
+                if (newline) try writer.interface.print("\n", .{});
+                try writer.interface.flush();
             },
             //FOR (ident) = (expression) TO (expression) [STEP (expression)]
             .For => {
@@ -133,8 +137,6 @@ pub fn exec(self: *const Statement, state: *State) !void {
         },
         else => {},
     }
-
-    try writer.interface.flush();
 }
 
 fn evalSubslice(stream: *TokenStream, state: *State) ?Value {
@@ -160,6 +162,11 @@ fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
         .string => |str| {
             if (acc != null) return error.UnexpectedStringLit;
             accNext = Value{ .string = str };
+        },
+        .function => |func| {
+            var group = stream.groupParens() orelse return error.FunctionMissingArgument;
+            const argument = try eval(&group, state, null);
+            accNext = function(func, state, argument) orelse return error.FunctionBadCall;
         },
         .operator => |op| switch (op) {
             //Comma acts as the string concatenation operator
@@ -265,6 +272,29 @@ fn doMathOp(op: Operator, a: f64, b: f64) ?f64 {
         .Gt => if (a > b) Value.TRUE.number else Value.FALSE.number,
         else => null,
     };
+}
+
+fn function(func: Function, state: *State, arg: Value) ?Value {
+    switch (func) {
+        .Abs => if (arg == .number) return Value{ .number = @abs(arg.number) },
+        .Len => if (arg == .string) return Value{ .number = @floatFromInt(arg.string.len) },
+        .Chr => if (arg == .number) {
+            var buf = state.allocString(1) catch return null;
+            buf[0] = @as(u8, @intFromFloat(arg.number));
+            return Value{ .string = buf };
+        },
+        .Lcase => if (arg == .string) {
+            const buf = state.allocString(arg.string.len) catch return null;
+            _ = std.ascii.lowerString(buf, arg.string);
+            return Value{ .string = buf };
+        },
+        .Ucase => if (arg == .string) {
+            const buf = state.allocString(arg.string.len) catch return null;
+            _ = std.ascii.upperString(buf, arg.string);
+            return Value{ .string = buf };
+        },
+    }
+    return null;
 }
 
 pub const TokenStream = struct {

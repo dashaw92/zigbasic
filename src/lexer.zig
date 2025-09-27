@@ -5,6 +5,7 @@ const Lexer = @This();
 
 pub const Keyword = enum {
     Print,
+    PrintNl, //same as print but with no newline
     Let,
     If,
     Then,
@@ -40,6 +41,14 @@ pub const Operator = enum {
     RightParen,
 };
 
+pub const Function = enum {
+    Abs,
+    Len,
+    Chr,
+    Lcase,
+    Ucase,
+};
+
 const str = []const u8;
 
 pub const Token = union(enum) {
@@ -48,6 +57,7 @@ pub const Token = union(enum) {
     keyword: Keyword,
     string: str,
     ident: str,
+    function: Function,
     newline,
 };
 
@@ -111,6 +121,17 @@ fn isKeyword(buf: str) ?Keyword {
     return null;
 }
 
+fn isFunction(buf: str) ?Function {
+    const eq = std.ascii.eqlIgnoreCase;
+    inline for (@typeInfo(Function).@"enum".fields) |field| {
+        if (eq(buf, field.name)) {
+            return @enumFromInt(field.value);
+        }
+    }
+
+    return null;
+}
+
 fn consumeWhitespace(self: *Lexer) !bool {
     while (!self.isEof() and std.ascii.isWhitespace(self.peek().?)) {
         defer self.next();
@@ -148,6 +169,11 @@ fn consumeAlpha(self: *Lexer) !Token {
 
     if (isKeyword(literal)) |keyword| {
         return .{ .keyword = keyword };
+    }
+
+    if (!self.isEof() and self.peek().? == '(') {
+        if (isFunction(literal)) |function|
+            return .{ .function = function };
     }
 
     //Once lexing is done, can't assume the provided source code

@@ -118,6 +118,12 @@ pub fn concat(self: *State, val1: Value, val2: Value) ![]const u8 {
     return output;
 }
 
+pub fn allocString(self: *State, len: usize) ![]u8 {
+    const buf = try self.alloc.alloc(u8, len);
+    try self.strings.append(self.alloc, buf);
+    return buf;
+}
+
 pub fn valueOf(self: *State, ident: []const u8) ?Value {
     return self.symbols.get(ident);
 }

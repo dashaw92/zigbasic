@@ -2,13 +2,10 @@ const std = @import("std");
 const Interpreter = @import("interpreter.zig");
 
 const src =
-    \\10 FOR I = 5 TO 10
-    \\20 PRINT I
-    \\25 IF I > 9 THEN 40
+    \\10 FOR I = 48 TO 126
+    \\20 PRINTNL CHR(I), " "
     \\30 NEXT I
-    \\31 END
-    \\40 PRINT "Ok it worked"
-    \\41 GOTO I
+    \\40 PRINT ""
 ;
 
 pub fn main() !void {
