@@ -24,6 +24,32 @@ pub fn exec(self: *const Statement, state: *State) !void {
         //Variable assignment
         //X = (expression)
         .ident => |id| {
+            if (!stream.atEnd() and stream.peek().?.* == .operator and stream.peek().?.*.operator == .LeftSquare) {
+                var current = state.valueOf(id) orelse return error.UnknownIdent;
+                var index = Value{ .number = 0 };
+                if (current != .array) return error.InvalidIndexAssignment;
+                var next = stream.peek().?.*;
+                while (!stream.atEnd() and current == .array and next == .operator and next.operator == .LeftSquare) {
+                    var group = stream.groupToBoundary(.LeftSquare, .RightSquare) orelse return error.MissingClosingSquare;
+                    index = try eval(&group, state, null);
+
+                    if (index != .number or @as(usize, @intFromFloat(index.number)) >= current.array.array.len) return error.IndexOutOfBounds;
+
+                    if (!stream.atEnd()) {
+                        next = stream.peek().?.*;
+                        if (next != .operator or next.operator != .LeftSquare) break;
+
+                        current = current.array.array[@as(usize, @intFromFloat(index.number))];
+                    }
+                }
+
+                const val = current;
+                stream.consumeOp(.Equal) catch return error.AssignmentExpectedEqual;
+                const value = evalSubslice(&stream, state) orelse return error.AssignmentError;
+
+                val.array.array[@as(usize, @intFromFloat(index.number))] = value;
+                return;
+            }
             stream.consumeOp(.Equal) catch return error.AssignmentExpectedEqual;
             const value = evalSubslice(&stream, state) orelse return error.AssignmentError;
             try state.set(id, value);
@@ -33,10 +59,9 @@ pub fn exec(self: *const Statement, state: *State) !void {
             .Print, .PrintNl => {
                 const newline = kw == .Print;
                 const value = try eval(&stream, state, null);
-                try switch (value) {
-                    .number => |n| writer.interface.print("{}", .{n}),
-                    .string => |s| writer.interface.print("{s}", .{s}),
-                };
+                const strRepr = value.toString(&state.alloc) catch return error.FailedToAllocStringRepr;
+                try writer.interface.print("{s}", .{strRepr});
+                state.alloc.free(strRepr);
 
                 if (newline) try writer.interface.print("\n", .{});
                 try writer.interface.flush();
@@ -188,15 +213,25 @@ fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
                 accNext = try eval(&group, state, null);
             },
             .LeftSquare => {
-                if (acc == null or acc.? != .string) return error.UnexpectedSquareBrackets;
+                if (acc == null) return error.UnexpectedSquareBrackets;
+
                 var group = stream.groupToBoundary(.LeftSquare, .RightSquare) orelse return error.MismatchedSquareBrackets;
                 const groupVal = try eval(&group, state, null);
                 if (groupVal != .number or groupVal.number < 0) return error.InvalidIndex;
 
                 const index: usize = @intFromFloat(groupVal.number);
-                if (index >= acc.?.string.len) return error.IndexOutOfBounds;
 
-                accNext = Value{ .string = acc.?.string.ptr[index .. index + 1] };
+                switch (acc.?) {
+                    .string => |s| {
+                        if (index >= s.len) return error.IndexOutOfBounds;
+                        accNext = Value{ .string = s.ptr[index .. index + 1] };
+                    },
+                    .array => |a| {
+                        if (index >= a.array.len) return error.IndexOutOfBounds;
+                        accNext = a.array[index];
+                    },
+                    else => return error.InvalidIndexOnNonIndexable,
+                }
             },
             //Same as parentheses
             else => {
@@ -292,7 +327,11 @@ fn doMathOp(op: Operator, a: f64, b: f64) ?f64 {
 fn function(func: Function, state: *State, arg: Value) ?Value {
     switch (func) {
         .Abs => if (arg == .number) return Value{ .number = @abs(arg.number) },
-        .Len => if (arg == .string) return Value{ .number = @floatFromInt(arg.string.len) },
+        .Len => switch (arg) {
+            .string => |s| return Value{ .number = @floatFromInt(s.len) },
+            .array => |a| return Value{ .number = @floatFromInt(a.array.len) },
+            else => return null,
+        },
         .Chr => if (arg == .number) {
             var buf = state.allocString(1) catch return null;
             buf[0] = @as(u8, @intFromFloat(arg.number));
@@ -309,6 +348,7 @@ fn function(func: Function, state: *State, arg: Value) ?Value {
             _ = std.ascii.upperString(buf, arg.string);
             return Value{ .string = buf };
         },
+        .Array => if (arg == .number) return state.allocArray(@intFromFloat(arg.number)) catch return null,
     }
     return null;
 }

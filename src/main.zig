@@ -2,11 +2,12 @@ const std = @import("std");
 const Interpreter = @import("interpreter.zig");
 
 const src =
-    \\10 MYSTR = "Hello World!"
-    \\20 FOR I = 0 TO LEN(MYSTR) - 1
-    \\30 PRINTNL INT(UCASE(MYSTR[I])), " "
-    \\40 NEXT I
-    \\50 PRINT ""
+    \\1 X = ARRAY(5)
+    \\2 X[0] = ARRAY(2)
+    \\3 X[0][0] = X
+    \\4 X[0][1] = "Hello"
+    \\5 PRINT X
+    \\6 PRINT LEN(X)
 ;
 
 pub fn main() !void {

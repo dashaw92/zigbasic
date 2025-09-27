@@ -18,6 +18,8 @@ halt: bool,
 memory: [1024]Value,
 //Extensions registered prior to execution enabling peek/poke to be used for real IO.
 extensions: std.ArrayList(MemoryExtension),
+//array ID for deinit
+arrays: std.ArrayList(Array),
 alloc: Alloc,
 
 pub fn init(alloc: *const Alloc) !State {
@@ -28,6 +30,7 @@ pub fn init(alloc: *const Alloc) !State {
         .jumps = try std.ArrayList(LoopState).initCapacity(alloc.*, 1024),
         .memory = [_]Value{Value{ .number = 0 }} ** (1024),
         .extensions = try std.ArrayList(MemoryExtension).initCapacity(alloc.*, 1024),
+        .arrays = try std.ArrayList(Array).initCapacity(alloc.*, 16),
         .halt = false,
         .alloc = alloc.*,
     };
@@ -40,6 +43,11 @@ pub fn deinit(self: *State) void {
     self.jumps.deinit(self.alloc);
     self.strings.deinit(self.alloc);
     self.extensions.deinit(self.alloc);
+
+    for (self.arrays.items) |arr| {
+        self.alloc.free(arr.array);
+    }
+    self.arrays.deinit(self.alloc);
     self.symbols.deinit();
 }
 
@@ -124,6 +132,12 @@ pub fn allocString(self: *State, len: usize) ![]u8 {
     return buf;
 }
 
+pub fn allocArray(self: *State, dim: usize) !Value {
+    const array = try Array.init(&self.alloc, dim);
+    try self.arrays.append(self.alloc, array);
+    return Value{ .array = array };
+}
+
 pub fn valueOf(self: *State, ident: []const u8) ?Value {
     return self.symbols.get(ident);
 }
@@ -139,6 +153,7 @@ pub fn drop(self: *State, ident: []const u8) void {
 pub const Value = union(enum) {
     number: f64,
     string: []const u8,
+    array: Array,
 
     //My BASIC implementation considers booleans to be 1 for true, all else for false.
     //I dislike the C-ism of "anything non-0 is true"
@@ -148,7 +163,46 @@ pub const Value = union(enum) {
     pub fn toString(self: *const Value, alloc: *Alloc) ![]const u8 {
         return switch (self.*) {
             .number => |num| std.fmt.allocPrint(alloc.*, "{}", .{num}),
-            .string => |s| s,
+            .string => |s| try alloc.dupe(u8, s),
+            .array => |arr| {
+                var buf = try std.ArrayList(u8).initCapacity(alloc.*, arr.array.len * 3);
+                const writer = buf.writer(alloc.*);
+                try std.fmt.format(writer, "[", .{});
+                for (arr.array, 0..) |el, idx| {
+                    if (el == .array) {
+                        try std.fmt.format(writer, "ARRAY({})", .{el.array.array.len});
+                    } else {
+                        if (el == .string) try std.fmt.format(writer, "\"", .{});
+                        const elStr = try el.toString(alloc);
+                        try std.fmt.format(writer, "{s}", .{elStr});
+                        alloc.free(elStr);
+                        if (el == .string) try std.fmt.format(writer, "\"", .{});
+                    }
+                    if (idx < arr.array.len - 1) {
+                        try std.fmt.format(writer, ", ", .{});
+                    }
+                }
+                try std.fmt.format(writer, "]", .{});
+
+                const strRep = try alloc.dupe(u8, buf.items);
+                buf.deinit(alloc.*);
+                return strRep;
+            },
+        };
+    }
+};
+
+const Array = struct {
+    alloc: Alloc,
+    array: []Value,
+
+    pub fn init(alloc: *Alloc, len: usize) !Array {
+        const array = try alloc.alloc(Value, len);
+        for (0..len) |i| array[i] = Value{ .number = 0 };
+
+        return .{
+            .alloc = alloc.*,
+            .array = array,
         };
     }
 };
