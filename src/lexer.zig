@@ -51,6 +51,7 @@ pub const Function = enum {
     Lcase,
     Ucase,
     Array,
+    Type,
 };
 
 const str = []const u8;

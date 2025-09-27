@@ -246,17 +246,17 @@ fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
                             const groupVal = try eval(&group, state, null);
                             //I think only malformed BASIC can bypass this, and I only care about the
                             //interpreter working on proper code.
-                            if (doMathOp(op, acc.?.number, groupVal.number)) |result| {
-                                accNext = Value{ .number = result };
+                            if (doMathOp(op, acc.?, groupVal)) |result| {
+                                accNext = result;
                             }
                         },
                         else => {},
                     },
                     else => |n| {
                         const value = toValue(&n, state);
-                        if (acc != null and acc.? == .number and value != null and value.? == .number) {
-                            if (doMathOp(op, acc.?.number, value.?.number)) |result| {
-                                accNext = Value{ .number = result };
+                        if (acc != null and value != null) {
+                            if (doMathOp(op, acc.?, value.?)) |result| {
+                                accNext = result;
                             }
                         }
                     },
@@ -306,7 +306,7 @@ fn floatEq(a: f64, b: f64) bool {
     return @abs(a - b) <= eps;
 }
 
-fn doMathOp(op: Operator, a: f64, b: f64) ?f64 {
+fn floatMath(op: Operator, a: f64, b: f64) ?f64 {
     return switch (op) {
         .Plus => a + b,
         .Sub => a - b,
@@ -322,6 +322,17 @@ fn doMathOp(op: Operator, a: f64, b: f64) ?f64 {
         .Gt => if (a > b) Value.TRUE.number else Value.FALSE.number,
         else => null,
     };
+}
+
+fn doMathOp(op: Operator, a: Value, b: Value) ?Value {
+    if (a == .number and b == .number) return Value{ .number = floatMath(op, a.number, b.number) orelse return null };
+    if (a == .string and b == .string) return switch (op) {
+        .DoubleEq => if (std.mem.eql(u8, a.string, b.string)) Value.TRUE else Value.FALSE,
+        .NotEq => if (!std.mem.eql(u8, a.string, b.string)) Value.TRUE else Value.FALSE,
+        else => null,
+    };
+
+    return null;
 }
 
 fn function(func: Function, state: *State, arg: Value) ?Value {
@@ -349,6 +360,15 @@ fn function(func: Function, state: *State, arg: Value) ?Value {
             return Value{ .string = buf };
         },
         .Array => if (arg == .number) return state.allocArray(@intFromFloat(arg.number)) catch return null,
+        .Type => {
+            const name = switch (arg) {
+                .number => "number",
+                .string => "string",
+                .array => "array",
+            };
+
+            return Value{ .string = name };
+        },
     }
     return null;
 }
