@@ -164,7 +164,7 @@ fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
             accNext = Value{ .string = str };
         },
         .function => |func| {
-            var group = stream.groupParens() orelse return error.FunctionMissingArgument;
+            var group = stream.groupToBoundary(.LeftParen, .RightParen) orelse return error.FunctionMissingArgument;
             const argument = try eval(&group, state, null);
             accNext = function(func, state, argument) orelse return error.FunctionBadCall;
         },
@@ -184,23 +184,38 @@ fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
             //^
             // we're here
             .LeftParen => {
-                var group = stream.groupParens() orelse return error.MismatchedParenthesis;
+                var group = stream.groupToBoundary(.LeftParen, .RightParen) orelse return error.MismatchedParenthesis;
                 accNext = try eval(&group, state, null);
             },
+            .LeftSquare => {
+                if (acc == null or acc.? != .string) return error.UnexpectedSquareBrackets;
+                var group = stream.groupToBoundary(.LeftSquare, .RightSquare) orelse return error.MismatchedSquareBrackets;
+                const groupVal = try eval(&group, state, null);
+                if (groupVal != .number or groupVal.number < 0) return error.InvalidIndex;
+
+                const index: usize = @intFromFloat(groupVal.number);
+                if (index >= acc.?.string.len) return error.IndexOutOfBounds;
+
+                accNext = Value{ .string = acc.?.string.ptr[index .. index + 1] };
+            },
+            //Same as parentheses
             else => {
                 switch (stream.pop().?.*) {
                     //... but if a '(' appears here...
                     //(A + B) * (C + D)
                     //        ^
                     //        now we're here, with '(' as the next token.
-                    .operator => |opNext| if (opNext == .LeftParen) {
-                        var group = stream.groupParens() orelse return error.MismatchedParenthesis;
-                        const groupVal = try eval(&group, state, null);
-                        //I think only malformed BASIC can bypass this, and I only care about the
-                        //interpreter working on proper code.
-                        if (doMathOp(op, acc.?.number, groupVal.number)) |result| {
-                            accNext = Value{ .number = result };
-                        }
+                    .operator => |opNext| switch (opNext) {
+                        .LeftParen => {
+                            var group = stream.groupToBoundary(.LeftParen, .RightParen) orelse return error.MismatchedParenthesis;
+                            const groupVal = try eval(&group, state, null);
+                            //I think only malformed BASIC can bypass this, and I only care about the
+                            //interpreter working on proper code.
+                            if (doMathOp(op, acc.?.number, groupVal.number)) |result| {
+                                accNext = Value{ .number = result };
+                            }
+                        },
+                        else => {},
                     },
                     else => |n| {
                         const value = toValue(&n, state);
@@ -283,6 +298,7 @@ fn function(func: Function, state: *State, arg: Value) ?Value {
             buf[0] = @as(u8, @intFromFloat(arg.number));
             return Value{ .string = buf };
         },
+        .Int => if (arg == .string) return Value{ .number = @floatFromInt(arg.string.ptr[0]) },
         .Lcase => if (arg == .string) {
             const buf = state.allocString(arg.string.len) catch return null;
             _ = std.ascii.lowerString(buf, arg.string);
@@ -383,39 +399,37 @@ pub const TokenStream = struct {
     }
 
     //Return a child TokenStream containing all tokens between
-    //a current parenthesis group. This is separate from subGroup because
+    //a current group. This is separate from subGroup because
     //subGroup is a generally applicable function used wherever statements can be
-    //nested, whereas parentheses are optionally included in said statements.
-    //This function should only be called when the current token is a LeftParen.
-    fn groupParens(self: *Self) ?TokenStream {
+    //nested, whereas these groups are optionally included in said statements.
+    //This function should only be called when the current token is a groupStart.
+    fn groupToBoundary(self: *Self, groupStart: Operator, groupEnd: Operator) ?TokenStream {
         if (self.atEnd()) return null;
         //If the current token is (, consume it
-        _ = self.consumeOp(.LeftParen) catch {};
+        _ = self.consumeOp(groupStart) catch {};
         const start = self.cursor;
         //Track the depth of parenths to ensure nesting works properly
         var depth: usize = 0;
         while (!self.atEnd()) : (self.cursor += 1) {
-            const current = self.peek();
-            switch (current.?.*) {
-                .operator => |op| switch (op) {
-                    .LeftParen => depth += 1,
-                    .RightParen => {
-                        if (depth == 0) break;
-                        depth -= 1;
-                    },
-                    else => continue,
-                },
-                else => continue,
+            const current = self.peek().?.*;
+            if (current != .operator) continue;
+
+            const op = current.operator;
+            if (op == groupStart) {
+                depth += 1;
+            } else if (op == groupEnd) {
+                if (depth == 0) break;
+                depth -= 1;
             }
         }
 
         //If depth isn't 0 at this point, the stream ran out of tokens before finding
-        //the matching right parenthesis.
+        //the matching end group operator.
         if (depth != 0) return null;
-        //Does not contain the left or right parentheses
+        //Does not contain the grouping operators
         const slice = self.slice[start..self.cursor];
         //Consume the right parenthesis
-        _ = self.consumeOp(.RightParen) catch {};
+        _ = self.consumeOp(groupEnd) catch {};
         return TokenStream.init(slice);
     }
 };

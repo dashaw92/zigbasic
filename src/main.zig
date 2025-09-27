@@ -2,10 +2,11 @@ const std = @import("std");
 const Interpreter = @import("interpreter.zig");
 
 const src =
-    \\10 FOR I = 48 TO 126
-    \\20 PRINTNL CHR(I), " "
-    \\30 NEXT I
-    \\40 PRINT ""
+    \\10 MYSTR = "Hello World!"
+    \\20 FOR I = 0 TO LEN(MYSTR) - 1
+    \\30 PRINTNL INT(UCASE(MYSTR[I])), " "
+    \\40 NEXT I
+    \\50 PRINT ""
 ;
 
 pub fn main() !void {

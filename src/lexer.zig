@@ -39,12 +39,15 @@ pub const Operator = enum {
     Comma,
     LeftParen,
     RightParen,
+    LeftSquare,
+    RightSquare,
 };
 
 pub const Function = enum {
     Abs,
     Len,
     Chr,
+    Int,
     Lcase,
     Ucase,
 };
@@ -223,6 +226,8 @@ fn isOperator(self: *Lexer) ?Operator {
         ',' => return .Comma,
         '(' => return .LeftParen,
         ')' => return .RightParen,
+        '[' => return .LeftSquare,
+        ']' => return .RightSquare,
         '=' => {
             if (nextIs(nextCh, '=')) {
                 self.next();
