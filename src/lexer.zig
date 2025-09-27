@@ -19,6 +19,7 @@ pub const Keyword = enum {
     Gosub,
     Return,
     End,
+    Rem,
 };
 
 pub const Operator = enum {
@@ -52,6 +53,14 @@ pub const Function = enum {
     Ucase,
     Array,
     Type,
+    Sin,
+    Cos,
+    Tan,
+    Sqrt,
+    Floor,
+    Ceil,
+    Deg,
+    Rad,
 };
 
 const str = []const u8;
@@ -173,6 +182,9 @@ fn consumeAlpha(self: *Lexer) !Token {
     }
 
     if (isKeyword(literal)) |keyword| {
+        if (keyword == .Rem) {
+            while (!self.isEof() and self.peek().? != '\n') : (self.next()) {}
+        }
         return .{ .keyword = keyword };
     }
 

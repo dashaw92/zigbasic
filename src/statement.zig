@@ -392,6 +392,14 @@ fn function(func: Function, state: *State, arg: Value) ?Value {
 
             return Value{ .string = name };
         },
+        .Sin => if (arg == .number) return Value{ .number = std.math.sin(arg.number) },
+        .Cos => if (arg == .number) return Value{ .number = std.math.cos(arg.number) },
+        .Tan => if (arg == .number) return Value{ .number = std.math.tan(arg.number) },
+        .Ceil => if (arg == .number) return Value{ .number = @ceil(arg.number) },
+        .Floor => if (arg == .number) return Value{ .number = @floor(arg.number) },
+        .Sqrt => if (arg == .number) return Value{ .number = std.math.sqrt(arg.number) },
+        .Deg => if (arg == .number) return Value{ .number = std.math.radiansToDegrees(arg.number) },
+        .Rad => if (arg == .number) return Value{ .number = std.math.degreesToRadians(arg.number) },
     }
     return null;
 }
