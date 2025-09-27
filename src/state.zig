@@ -114,13 +114,8 @@ pub fn concat(self: *State, val1: Value, val2: Value) ![]const u8 {
         val2str,
     });
 
-    if (val1 == .number) {
-        self.alloc.free(val1str);
-    }
-
-    if (val2 == .number) {
-        self.alloc.free(val2str);
-    }
+    self.alloc.free(val1str);
+    self.alloc.free(val2str);
 
     try self.strings.append(self.alloc, output);
     return output;

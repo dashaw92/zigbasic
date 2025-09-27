@@ -246,19 +246,26 @@ fn eval(stream: *TokenStream, state: *State, acc: ?Value) !Value {
                             const groupVal = try eval(&group, state, null);
                             //I think only malformed BASIC can bypass this, and I only care about the
                             //interpreter working on proper code.
-                            if (doMathOp(op, acc.?, groupVal)) |result| {
+                            if (doMathOp(op, state, acc.?, groupVal)) |result| {
                                 accNext = result;
                             }
                         },
                         else => {},
                     },
                     else => |n| {
-                        const value = toValue(&n, state);
+                        const value = outer: switch (n) {
+                            .function => {
+                                var group = stream.groupToBoundary(.LeftParen, .RightParen) orelse return error.MismatchedParenthesis;
+                                const groupVal = try eval(&group, state, null);
+                                break :outer function(n.function, state, groupVal) orelse return error.FunctionMissingArgument;
+                            },
+                            else => toValue(&n, state),
+                        };
                         if (acc != null and value != null) {
-                            if (doMathOp(op, acc.?, value.?)) |result| {
+                            if (doMathOp(op, state, acc.?, value.?)) |result| {
                                 accNext = result;
                             }
-                        }
+                        } else return error.InvalidOperation;
                     },
                 }
             },
@@ -324,13 +331,29 @@ fn floatMath(op: Operator, a: f64, b: f64) ?f64 {
     };
 }
 
-fn doMathOp(op: Operator, a: Value, b: Value) ?Value {
+fn doMathOp(op: Operator, state: *State, a: Value, b: Value) ?Value {
     if (a == .number and b == .number) return Value{ .number = floatMath(op, a.number, b.number) orelse return null };
     if (a == .string and b == .string) return switch (op) {
         .DoubleEq => if (std.mem.eql(u8, a.string, b.string)) Value.TRUE else Value.FALSE,
         .NotEq => if (!std.mem.eql(u8, a.string, b.string)) Value.TRUE else Value.FALSE,
         else => null,
     };
+    if (a == .array and b == .array and op == .Plus) {
+        const newArray = state.allocArray(a.array.array.len + b.array.array.len) catch return null;
+
+        var i: usize = 0;
+        for (a.array.array) |el| {
+            newArray.array.array[i] = el;
+            i += 1;
+        }
+
+        for (b.array.array) |el| {
+            newArray.array.array[i] = el;
+            i += 1;
+        }
+
+        return newArray;
+    }
 
     return null;
 }
