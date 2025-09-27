@@ -63,6 +63,12 @@ fn buildStatements(self: *Interpreter) !void {
             //Upon hitting a newline, the current group can be stored in the statement list.
             //Handles bookkeeping for line numbers.
             .newline => {
+                const firstToken = self.lexer.tokens.items[start];
+                if (firstToken == .number) {
+                    lineNumber = @max(lineNumber + 1, @as(usize, @intFromFloat(firstToken.number)));
+                    start += 1;
+                }
+
                 try self.program.append(self.alloc, .{
                     .line = lineNumber,
                     .stream = TokenStream.init(self.lexer.tokens.items[start..end]),
@@ -81,7 +87,6 @@ pub fn run(self: *Interpreter) !void {
     var lineToIdx = std.AutoHashMap(usize, usize).init(self.alloc);
     defer lineToIdx.deinit();
     for (0.., self.program.items) |i, stmt| {
-        // std.log.info("{}", .{stmt});
         try lineToIdx.put(stmt.line, i);
 
         maxIdx = i;
@@ -95,7 +100,6 @@ pub fn run(self: *Interpreter) !void {
 
         if (self.state.jumpBack) |target| {
             i = lineToIdx.get(target) orelse return error.InvalidLineTarget;
-            // std.log.info("{} ({})", .{ i, self.program.items[i] });
             self.state.jumpBack = null;
             continue;
         }
