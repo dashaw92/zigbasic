@@ -59,21 +59,21 @@ larger array:
 
 ## Functions
 
-| Function | Argument type   | Description |
-|----------|-----------------|-------------|
-| ABS      | number          | Absolute value of number |
-| LEN      | string or array | Length of argument|
-| CHR      | number          | Number to ASCII|
-| INT      | string          | Convert first character of string to number|
-| LCASE    | string          | Convert string to lowercase|
-| UCASE    | string          | Convert string to uppercase|
-| ARRAY    | number          | Return an empty array of specified length|
-| TYPE     | any             | Return type name of argument ("number", "string", "array")|
-| SIN      | number          | sine(number)|
-| COS      | number          | cosine(number)|
-| TAN      | number          | tangent(number)|
-| SQRT     | number          | square root(number)|
-| FLOOR    | number          | Round down number to nearest integer|
-| CEIL     | number          | Round up number to nearest integer|
-| DEG      | number          | Convert radians to degrees|
-| RAD      | number          | Convert degrees to radians|
+| Function | Argument type   | Return type | Description |
+|----------|-----------------|-------------|-------------|
+| ABS      | number          | number | Absolute value of number |
+| LEN      | string or array | number | Length of argument|
+| CHR      | number          | string | Number to ASCII|
+| INT      | string          | number | Convert first character of string to number|
+| LCASE    | string          | string | Convert string to lowercase|
+| UCASE    | string          | string | Convert string to uppercase|
+| ARRAY    | number          | array | Return an empty array of specified length|
+| TYPE     | any             | string | Return type name of argument ("number", "string", "array")|
+| SIN      | number          | number | sine(number)|
+| COS      | number          | number | cosine(number)|
+| TAN      | number          | number | tangent(number)|
+| SQRT     | number          | number | square root(number)|
+| FLOOR    | number          | number | Round down number to nearest integer|
+| CEIL     | number          | number | Round up number to nearest integer|
+| DEG      | number          | number | Convert radians to degrees|
+| RAD      | number          | number | Convert degrees to radians|
