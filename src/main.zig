@@ -1,5 +1,6 @@
 const std = @import("std");
-const Interpreter = @import("interpreter.zig");
+const basic = @import("zigbasic_lib");
+const Interpreter = basic.Interpreter;
 
 const src =
     \\ 5 REM 180 degrees to radians is ≈ to Pi!
