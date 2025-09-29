@@ -3,10 +3,14 @@ const basic = @import("zigbasic_lib");
 const Interpreter = basic.Interpreter;
 
 const src =
-    \\10 FOR I = 0 TO 1000
-    \\20 POKE (I % 2) TO 19
-    \\30 NEXT I
-    \\40 GOTO 10
+    \\10 X = 10
+    \\20 IF (X != 10) THEN 40
+    \\30 PRINTNL "Enter something or Q to quit: "
+    \\40 INPUT X
+    \\50 IF CHR(X) == "q" THEN 80
+    \\60 PRINTNL CHR(X)
+    \\70 GOTO 20
+    \\80 END
 ;
 
 pub fn main() !void {

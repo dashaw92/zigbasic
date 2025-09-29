@@ -145,6 +145,7 @@ pub fn exec(self: *const Statement, state: *State, io: *IO) !void {
             .Peek => {
                 const value = evalSubslice(&stream, state) orelse return error.PeekInvalidExpression;
                 stream.consumeKeyword(.To) catch return error.PeekMissingTo;
+                //TODO support arrays here
                 const ident = stream.consumeIdent() catch return error.PeekMissingIdent;
 
                 const memory = state.memPeek(@intFromFloat(value.number)) catch return error.PeekMemoryError;
@@ -157,6 +158,17 @@ pub fn exec(self: *const Statement, state: *State, io: *IO) !void {
                 stream.consumeKeyword(.To) catch return error.PokeMissingTo;
                 const target = evalSubslice(&stream, state) orelse return error.PokeMissingTarget;
                 state.memPoke(@intFromFloat(target.number), value) catch return error.PokeMemoryError;
+            },
+            .Input => {
+                //TODO support arrays here
+                const ident = stream.consumeIdent() catch return error.InputMissingIdent;
+
+                var buf: [1]u8 = [1]u8{0};
+                io.in.readSliceAll(&buf) catch |e| {
+                    if (e != error.EndOfStream) return error.InputReadError;
+                };
+
+                try state.set(ident, Value{ .number = @floatFromInt(buf[0]) });
             },
             else => {},
         },

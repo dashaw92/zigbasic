@@ -12,6 +12,7 @@
 |---------|------------------|-------------|
 | PRINT   | PRINT (expr) | Evaluate the expression and print it |
 | PRINTNL | PRINTNL (expr) | Same as print but without adding a newline |
+| INPUT   | INPUT (ident) | Read a single character from input and store into ident |
 | LET     | N/A    | Tokenized but not used (ignored). |
 | IF      | IF (expr) THEN (expr) | If the expression evaluates to 1 (True), jump to the line evaluated by the second expr. |
 | THEN    | N/A | Part of IF |

@@ -20,6 +20,7 @@ pub const Keyword = enum {
     Return,
     End,
     Rem,
+    Input,
 };
 
 pub const Operator = enum {
