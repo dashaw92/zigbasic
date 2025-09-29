@@ -62,6 +62,7 @@ pub const Function = enum {
     Ceil,
     Deg,
     Rad,
+    Peek,
 };
 
 const str = []const u8;
@@ -182,16 +183,16 @@ fn consumeAlpha(self: *Lexer) !Token {
         return error.InvalidToken;
     }
 
+    if (!self.isEof() and self.peek().? == '(') {
+        if (isFunction(literal)) |function|
+            return .{ .function = function };
+    }
+
     if (isKeyword(literal)) |keyword| {
         if (keyword == .Rem) {
             while (!self.isEof() and self.peek().? != '\n') : (self.next()) {}
         }
         return .{ .keyword = keyword };
-    }
-
-    if (!self.isEof() and self.peek().? == '(') {
-        if (isFunction(literal)) |function|
-            return .{ .function = function };
     }
 
     //Once lexing is done, can't assume the provided source code

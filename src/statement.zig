@@ -443,6 +443,7 @@ fn function(func: Function, state: *State, arg: Value) ?Value {
         .Sqrt => if (arg == .number) return Value{ .number = std.math.sqrt(arg.number) },
         .Deg => if (arg == .number) return Value{ .number = std.math.radiansToDegrees(arg.number) },
         .Rad => if (arg == .number) return Value{ .number = std.math.degreesToRadians(arg.number) },
+        .Peek => if (arg == .number) return state.memPeek(@as(usize, @intFromFloat(arg.number))) catch return Value{ .number = 0 },
     }
     return null;
 }

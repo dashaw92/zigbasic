@@ -66,6 +66,7 @@ larger array:
 | LEN      | string or array | number | Length of argument|
 | CHR      | number          | string | Number to ASCII|
 | INT      | string          | number | Convert first character of string to number|
+| PEEK     | number          | any    | Same as PEEK keyword |
 | LCASE    | string          | string | Convert string to lowercase|
 | UCASE    | string          | string | Convert string to uppercase|
 | ARRAY    | number          | array | Return an empty array of specified length|
