@@ -55,7 +55,7 @@ pub fn registerExtension(self: *State, extension: MemoryExtension) !void {
     for (self.extensions.items) |other| {
         if (other.address == extension.address) return error.AddressAlreadyInUse;
     }
-    try self.extensions.append(self.alloc, extension);
+    try self.extensions.append(self.alloc.*, extension);
 }
 
 pub fn pushJump(self: *State, loop: LoopState) !void {

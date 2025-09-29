@@ -3,9 +3,10 @@ const basic = @import("zigbasic_lib");
 const Interpreter = basic.Interpreter;
 
 const src =
-    \\ 5 REM 180 degrees to radians is ≈ to Pi!
-    \\10 PI = RAD(180)
-    \\20 PRINT FLOOR(PI * 100) / 100
+    \\10 FOR I = 0 TO 1000
+    \\20 POKE (I % 2) TO 19
+    \\30 NEXT I
+    \\40 GOTO 10
 ;
 
 pub fn main() !void {
@@ -21,8 +22,25 @@ pub fn main() !void {
         .out = &out_handle.interface,
         .in = &in_handle.interface,
     };
+
     var int = try Interpreter.init(&alloc, io, src);
     defer int.deinit();
+    try int.state.registerExtension(.{
+        .address = 19,
+        .getValue = getGPIO19,
+        .setValue = setGPIO19,
+    });
 
     try int.run();
+}
+
+fn getGPIO19(_: usize) basic.Value {
+    return basic.Value.TRUE;
+}
+
+fn setGPIO19(_: usize, v: basic.Value) void {
+    switch (v) {
+        .number => |n| if (n < 1.0) std.log.info("{}", .{n}) else std.log.info("{}", .{n}),
+        else => {},
+    }
 }
