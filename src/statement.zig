@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const IO = @import("interpreter.zig").IO;
 const Lexer = @import("lexer.zig");
 const Keyword = Lexer.Keyword;
 const Operator = Lexer.Operator;
@@ -13,9 +14,8 @@ const Statement = @This();
 line: usize,
 stream: TokenStream,
 
-pub fn exec(self: *const Statement, state: *State) !void {
-    const handle = std.fs.File.stdout();
-    var writer = handle.writer(&.{});
+pub fn exec(self: *const Statement, state: *State, io: *IO) !void {
+    var writer = io.out;
 
     var stream = self.stream;
     stream.reset();
@@ -60,11 +60,11 @@ pub fn exec(self: *const Statement, state: *State) !void {
                 const newline = kw == .Print;
                 const value = try eval(&stream, state, null);
                 const strRepr = value.toString(state.alloc) catch return error.FailedToAllocStringRepr;
-                try writer.interface.print("{s}", .{strRepr});
+                try writer.print("{s}", .{strRepr});
                 state.alloc.free(strRepr);
 
-                if (newline) try writer.interface.print("\n", .{});
-                try writer.interface.flush();
+                if (newline) try writer.print("\n", .{});
+                try writer.flush();
             },
             //FOR (ident) = (expression) TO (expression) [STEP (expression)]
             .For => {

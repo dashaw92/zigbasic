@@ -10,14 +10,20 @@ const TokenStream = Statement.TokenStream;
 
 const Interpreter = @This();
 
+pub const IO = struct {
+    out: *std.Io.Writer,
+    in: *std.Io.Reader,
+};
+
 //NB: lexer must remain alive as Statements slice the tokens directly
 //This()::deinit will deinit the lexer
 lexer: Lexer,
+io: IO,
 program: List(Statement),
 state: State,
 alloc: *const std.mem.Allocator,
 
-pub fn init(alloc: *const Alloc, src: []const u8) !Interpreter {
+pub fn init(alloc: *const Alloc, io: IO, src: []const u8) !Interpreter {
     var lexer = try Lexer.init(src, alloc);
     try lexer.lex();
 
@@ -26,6 +32,7 @@ pub fn init(alloc: *const Alloc, src: []const u8) !Interpreter {
 
     var self = Interpreter{
         .lexer = lexer,
+        .io = io,
         .program = program,
         .state = state,
         .alloc = alloc,
@@ -94,7 +101,7 @@ pub fn run(self: *Interpreter) !void {
 
     var i: usize = 0;
     while (i <= maxIdx) {
-        try self.program.items[i].exec(&self.state);
+        try self.program.items[i].exec(&self.state, &self.io);
 
         if (self.state.isHalted()) break;
 

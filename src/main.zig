@@ -13,7 +13,15 @@ pub fn main() !void {
     const alloc = gpa.allocator();
     defer _ = gpa.deinit();
 
-    var int = try Interpreter.init(&alloc, src);
+    const stdout = std.fs.File.stdout();
+    var out_handle = stdout.writer(&.{});
+    const stdin = std.fs.File.stdin();
+    var in_handle = stdin.reader(&.{});
+    const io = basic.IO{
+        .out = &out_handle.interface,
+        .in = &in_handle.interface,
+    };
+    var int = try Interpreter.init(&alloc, io, src);
     defer int.deinit();
 
     try int.run();
