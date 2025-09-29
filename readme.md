@@ -78,3 +78,24 @@ larger array:
 | CEIL     | number          | number | Round up number to nearest integer|
 | DEG      | number          | number | Convert radians to degrees|
 | RAD      | number          | number | Convert degrees to radians|
+
+## Operators
+
+| Operator | Argument types | Return type | Description |
+|----------|----------------|-------------|-------------|
+| +        | number or array | number or array | numbers: addition; arrays: concatenation |
+| -        | number | number | subtraction |
+| /        | number | number | division |
+| ^        | number | number | exponentiation |
+| %        | number | number | modulo |
+| =        | any    | none   | assignment |
+| !        | N/A    | N/A    | not used |
+| <        | number | number (0 or 1) | less than |
+| <=       | number | number (0 or 1) | less than or equal |
+| >        | number | number (0 or 1) | greater than |
+| >=       | number | number (0 or 1) | greater than or equal |
+| ==       | number or string | number (0 or 1) | equals |
+| !=       | number or string | number (0 or 1) | not equals |
+| ,        | any | string | string coercion and concatenation |
+| ( and )  | any | any | evaluation grouping, function calls |
+| \[ and \]  | array | any | array indexing |
