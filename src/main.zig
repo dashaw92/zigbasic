@@ -3,14 +3,19 @@ const basic = @import("zigbasic_lib");
 const Interpreter = basic.Interpreter;
 
 const src =
-    \\10 X = 10
-    \\20 IF (X != 10) THEN 40
-    \\30 PRINTNL "Enter something or Q to quit: "
-    \\40 INPUT X
-    \\50 IF CHR(X) == "q" THEN 80
-    \\60 PRINTNL CHR(X)
-    \\70 GOTO 20
-    \\80 END
+    \\10 POKE 10 TO 0
+    \\20 X = ARRAY(5)
+    \\30 PRINT X
+    \\40 PEEK 0 TO X[0]
+    \\50 PRINT X
+    // \\10 X = 10
+    // \\20 IF (X != 10) THEN 40
+    // \\30 PRINTNL "Enter something or Q to quit: "
+    // \\40 INPUT X
+    // \\50 IF CHR(X) == "q" THEN 80
+    // \\60 PRINTNL CHR(X)
+    // \\70 GOTO 20
+    // \\80 END
 ;
 
 pub fn main() !void {

@@ -14,6 +14,47 @@ const Statement = @This();
 line: usize,
 stream: TokenStream,
 
+const ArrayAssignment = struct {
+    target: Value,
+    index: Value,
+};
+
+//Statements that assign values to idents should support arbitrary array indexing if the ident is an array.
+//This function will iteratively index into arrays until the bottom value is found. If the ident is not an array,
+//returns null. Otherwise, the target array and the last evaluated index is returned so statements can correctly
+//assign the following expression's value into the array.
+fn identMaybeArray(stream: *TokenStream, state: *State, ident: []const u8) !?ArrayAssignment {
+    //If the ident is followed by an indexing operator ('['), iterate through the tokens until finished indexing.
+    if (stream.nextOpIs(.LeftSquare)) {
+        //For assignment, this would normally be fine. However, indexing requires an array (duh), so if the
+        //value isn't currently defined, wtf are they trying to do??
+        var current = state.valueOf(ident) orelse return error.UnknownIdent;
+        var index = Value{ .number = 0 };
+
+        //Likewise, cannot index into anything but an array (string indexing is read-only).
+        if (current != .array) return error.InvalidIndexAssignment;
+        while (stream.nextOpIs(.LeftSquare) and current == .array) {
+            //inner group of current indexing group
+            var group = stream.groupToBoundary(.LeftSquare, .RightSquare) orelse return error.MissingClosingSquare;
+
+            //can be any valid expression, so need to eval
+            index = try eval(&group, state, null);
+            if (index != .number or @as(usize, @intFromFloat(index.number)) >= current.array.array.len) return error.IndexOutOfBounds;
+
+            //Are we finished indexing?
+            if (!stream.nextOpIs(.LeftSquare)) break;
+
+            //Nope, update current to reflect this index group's evaluation
+            current = current.array.array[@as(usize, @intFromFloat(index.number))];
+        }
+
+        return .{ .index = index, .target = current };
+    }
+
+    //No '[' in tokenstream after starting ident.
+    return null;
+}
+
 pub fn exec(self: *const Statement, state: *State, io: *IO) !void {
     var writer = io.out;
 
@@ -24,32 +65,14 @@ pub fn exec(self: *const Statement, state: *State, io: *IO) !void {
         //Variable assignment
         //X = (expression)
         .ident => |id| {
-            if (!stream.atEnd() and stream.peek().?.* == .operator and stream.peek().?.*.operator == .LeftSquare) {
-                var current = state.valueOf(id) orelse return error.UnknownIdent;
-                var index = Value{ .number = 0 };
-                if (current != .array) return error.InvalidIndexAssignment;
-                var next = stream.peek().?.*;
-                while (!stream.atEnd() and current == .array and next == .operator and next.operator == .LeftSquare) {
-                    var group = stream.groupToBoundary(.LeftSquare, .RightSquare) orelse return error.MissingClosingSquare;
-                    index = try eval(&group, state, null);
-
-                    if (index != .number or @as(usize, @intFromFloat(index.number)) >= current.array.array.len) return error.IndexOutOfBounds;
-
-                    if (!stream.atEnd()) {
-                        next = stream.peek().?.*;
-                        if (next != .operator or next.operator != .LeftSquare) break;
-
-                        current = current.array.array[@as(usize, @intFromFloat(index.number))];
-                    }
-                }
-
-                const val = current;
+            const array = try identMaybeArray(&stream, state, id);
+            if (array != null) {
                 stream.consumeOp(.Equal) catch return error.AssignmentExpectedEqual;
                 const value = evalSubslice(&stream, state) orelse return error.AssignmentError;
-
-                val.array.array[@as(usize, @intFromFloat(index.number))] = value;
+                array.?.target.array.array[@as(usize, @intFromFloat(array.?.index.number))] = value;
                 return;
             }
+
             stream.consumeOp(.Equal) catch return error.AssignmentExpectedEqual;
             const value = evalSubslice(&stream, state) orelse return error.AssignmentError;
             try state.set(id, value);
@@ -80,8 +103,8 @@ pub fn exec(self: *const Statement, state: *State, io: *IO) !void {
                 if (startRange != .number or endRange != .number) return error.ForInvalidRange;
 
                 var step: f64 = 1;
-                const nextTok = stream.pop();
-                if (nextTok != null and nextTok.?.* == .keyword and nextTok.?.*.keyword == .Step) {
+                if (stream.nextKeywordIs(.Step)) {
+                    stream.consumeKeyword(.Step) catch unreachable;
                     const providedStep = evalSubslice(&stream, state) orelse return error.ForInvalidStep;
                     step = providedStep.number;
                 }
@@ -144,11 +167,15 @@ pub fn exec(self: *const Statement, state: *State, io: *IO) !void {
             //value returned is stored in ident
             .Peek => {
                 const value = evalSubslice(&stream, state) orelse return error.PeekInvalidExpression;
-                stream.consumeKeyword(.To) catch return error.PeekMissingTo;
-                //TODO support arrays here
-                const ident = stream.consumeIdent() catch return error.PeekMissingIdent;
-
                 const memory = state.memPeek(@intFromFloat(value.number)) catch return error.PeekMemoryError;
+                stream.consumeKeyword(.To) catch return error.PeekMissingTo;
+                const ident = stream.consumeIdent() catch return error.PeekMissingIdent;
+                const array = try identMaybeArray(&stream, state, ident);
+                if (array != null) {
+                    array.?.target.array.array[@as(usize, @intFromFloat(array.?.index.number))] = memory;
+                    return;
+                }
+
                 try state.set(ident, memory);
             },
             //POKE (expr. A) TO (expr. B)
@@ -159,14 +186,18 @@ pub fn exec(self: *const Statement, state: *State, io: *IO) !void {
                 const target = evalSubslice(&stream, state) orelse return error.PokeMissingTarget;
                 state.memPoke(@intFromFloat(target.number), value) catch return error.PokeMemoryError;
             },
+            //INPUT (ident)
             .Input => {
-                //TODO support arrays here
-                const ident = stream.consumeIdent() catch return error.InputMissingIdent;
-
                 var buf: [1]u8 = [1]u8{0};
                 io.in.readSliceAll(&buf) catch |e| {
                     if (e != error.EndOfStream) return error.InputReadError;
                 };
+                const ident = stream.consumeIdent() catch return error.InputMissingIdent;
+                const array = try identMaybeArray(&stream, state, ident);
+                if (array != null) {
+                    array.?.target.array.array[@as(usize, @intFromFloat(array.?.index.number))] = Value{ .number = @floatFromInt(buf[0]) };
+                    return;
+                }
 
                 try state.set(ident, Value{ .number = @floatFromInt(buf[0]) });
             },
@@ -479,6 +510,14 @@ pub const TokenStream = struct {
         const tok = self.peek();
         if (tok == null or tok.?.* != .operator or tok.?.*.operator != op) return error.ExpectedOperator;
         self.cursor += 1;
+    }
+
+    fn nextOpIs(self: *Self, op: Operator) bool {
+        return !self.atEnd() and self.peek().?.* == .operator and self.peek().?.*.operator == op;
+    }
+
+    fn nextKeywordIs(self: *Self, kw: Keyword) bool {
+        return !self.atEnd() and self.peek().?.* == .keyword and self.peek().?.*.keyword == kw;
     }
 
     //Returns a child TokenStream of all tokens up to the next boundary token, i.e. the next keyword:
