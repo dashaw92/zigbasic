@@ -75,10 +75,13 @@ larger array:
 | COS      | number          | number | cosine(number)|
 | TAN      | number          | number | tangent(number)|
 | SQRT     | number          | number | square root(number)|
+| LOG      | number          | number | log base 10 |
 | FLOOR    | number          | number | Round down number to nearest integer|
 | CEIL     | number          | number | Round up number to nearest integer|
 | DEG      | number          | number | Convert radians to degrees|
 | RAD      | number          | number | Convert degrees to radians|
+| ISNAN    | number          | number (0 or 1) | Check if number is NaN |
+| ISINF    | number          | number (0 or 1) | Check if number is ±Inf |
 
 ## Operators
 

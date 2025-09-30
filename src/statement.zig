@@ -435,15 +435,18 @@ fn function(func: Function, state: *State, arg: Value) ?Value {
 
             return Value{ .string = name };
         },
-        .Sin => if (arg == .number) return Value{ .number = std.math.sin(arg.number) },
-        .Cos => if (arg == .number) return Value{ .number = std.math.cos(arg.number) },
-        .Tan => if (arg == .number) return Value{ .number = std.math.tan(arg.number) },
+        .Sin => if (arg == .number) return Value{ .number = @sin(arg.number) },
+        .Cos => if (arg == .number) return Value{ .number = @cos(arg.number) },
+        .Tan => if (arg == .number) return Value{ .number = @tan(arg.number) },
         .Ceil => if (arg == .number) return Value{ .number = @ceil(arg.number) },
         .Floor => if (arg == .number) return Value{ .number = @floor(arg.number) },
-        .Sqrt => if (arg == .number) return Value{ .number = std.math.sqrt(arg.number) },
+        .Sqrt => if (arg == .number) return Value{ .number = @sqrt(arg.number) },
+        .Log => if (arg == .number) return Value{ .number = @log10(arg.number) },
         .Deg => if (arg == .number) return Value{ .number = std.math.radiansToDegrees(arg.number) },
         .Rad => if (arg == .number) return Value{ .number = std.math.degreesToRadians(arg.number) },
         .Peek => if (arg == .number) return state.memPeek(@as(usize, @intFromFloat(arg.number))) catch return Value{ .number = 0 },
+        .IsNan => if (arg == .number) return if (std.math.isNan(arg.number)) Value.TRUE else Value.FALSE,
+        .IsInf => if (arg == .number) return if (std.math.isInf(arg.number)) Value.TRUE else Value.FALSE,
     }
     return null;
 }

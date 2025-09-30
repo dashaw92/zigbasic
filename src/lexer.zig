@@ -58,11 +58,14 @@ pub const Function = enum {
     Cos,
     Tan,
     Sqrt,
+    Log,
     Floor,
     Ceil,
     Deg,
     Rad,
     Peek,
+    IsNan,
+    IsInf,
 };
 
 const str = []const u8;
