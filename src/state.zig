@@ -15,7 +15,7 @@ jumps: std.ArrayList(LoopState),
 //Flag for programs to immediately halt interpretation via END keyword.
 halt: bool,
 //1 KB of emulated memory.
-memory: [1024]Value,
+memory: [64]f64,
 //Extensions registered prior to execution enabling peek/poke to be used for real IO.
 extensions: std.ArrayList(MemoryExtension),
 //array ID for deinit
@@ -26,10 +26,10 @@ pub fn init(alloc: *const Alloc) !State {
     return .{
         .jumpBack = null,
         .symbols = Map(Value).init(alloc.*),
-        .strings = try std.ArrayList([]u8).initCapacity(alloc.*, 512),
-        .jumps = try std.ArrayList(LoopState).initCapacity(alloc.*, 1024),
-        .memory = [_]Value{Value{ .number = 0 }} ** (1024),
-        .extensions = try std.ArrayList(MemoryExtension).initCapacity(alloc.*, 1024),
+        .strings = try std.ArrayList([]u8).initCapacity(alloc.*, 32),
+        .jumps = try std.ArrayList(LoopState).initCapacity(alloc.*, 32),
+        .memory = [_]f64{0} ** 64,
+        .extensions = try std.ArrayList(MemoryExtension).initCapacity(alloc.*, 8),
         .arrays = try std.ArrayList(Array).initCapacity(alloc.*, 16),
         .halt = false,
         .alloc = alloc,
@@ -82,7 +82,7 @@ pub fn clearLoops(self: *State) void {
     while (self.popJump()) |_| {}
 }
 
-pub fn memPeek(self: *State, addr: usize) !Value {
+pub fn memPeek(self: *State, addr: usize) !f64 {
     if (addr >= self.memory.len) return error.PeekOutOfBounds;
 
     for (self.extensions.items) |ext| {
@@ -94,7 +94,7 @@ pub fn memPeek(self: *State, addr: usize) !Value {
     return self.memory[addr];
 }
 
-pub fn memPoke(self: *State, addr: usize, value: Value) !void {
+pub fn memPoke(self: *State, addr: usize, value: f64) !void {
     if (addr >= self.memory.len) return error.PokeOutOfBounds;
 
     for (self.extensions.items) |ext| {
@@ -210,6 +210,6 @@ pub const LoopState = struct {
 
 pub const MemoryExtension = struct {
     address: usize,
-    getValue: *const fn (usize) Value,
-    setValue: *const fn (usize, Value) void,
+    getValue: *const fn (usize) f64,
+    setValue: *const fn (usize, f64) void,
 };

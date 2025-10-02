@@ -86,7 +86,7 @@ pub fn exec(self: *const Statement, state: *State, io: *IO) !void {
                 try writer.print("{s}", .{strRepr});
                 state.alloc.free(strRepr);
 
-                if (newline) try writer.print("\n", .{});
+                if (newline) try writer.print("\r\n", .{});
                 try writer.flush();
             },
             //FOR (ident) = (expression) TO (expression) [STEP (expression)]
@@ -172,19 +172,20 @@ pub fn exec(self: *const Statement, state: *State, io: *IO) !void {
                 const ident = stream.consumeIdent() catch return error.PeekMissingIdent;
                 const array = try identMaybeArray(&stream, state, ident);
                 if (array != null) {
-                    array.?.target.array.array[@as(usize, @intFromFloat(array.?.index.number))] = memory;
+                    array.?.target.array.array[@as(usize, @intFromFloat(array.?.index.number))] = Value{ .number = memory };
                     return;
                 }
 
-                try state.set(ident, memory);
+                try state.set(ident, Value{ .number = memory });
             },
             //POKE (expr. A) TO (expr. B)
             //memory at (expr. B) is set to (expr. A)
             .Poke => {
                 const value = evalSubslice(&stream, state) orelse return error.PokeMissingValue;
+                if (value != .number) return error.PokeInvalidValue;
                 stream.consumeKeyword(.To) catch return error.PokeMissingTo;
                 const target = evalSubslice(&stream, state) orelse return error.PokeMissingTarget;
-                state.memPoke(@intFromFloat(target.number), value) catch return error.PokeMemoryError;
+                state.memPoke(@intFromFloat(target.number), value.number) catch return error.PokeMemoryError;
             },
             //INPUT (ident)
             .Input => {
@@ -444,7 +445,7 @@ fn function(func: Function, state: *State, arg: Value) ?Value {
         .Log => if (arg == .number) return Value{ .number = @log10(arg.number) },
         .Deg => if (arg == .number) return Value{ .number = std.math.radiansToDegrees(arg.number) },
         .Rad => if (arg == .number) return Value{ .number = std.math.degreesToRadians(arg.number) },
-        .Peek => if (arg == .number) return state.memPeek(@as(usize, @intFromFloat(arg.number))) catch return Value{ .number = 0 },
+        .Peek => if (arg == .number) return Value{ .number = state.memPeek(@as(usize, @intFromFloat(arg.number))) catch 0.0 },
         .IsNan => if (arg == .number) return if (std.math.isNan(arg.number)) Value.TRUE else Value.FALSE,
         .IsInf => if (arg == .number) return if (std.math.isInf(arg.number)) Value.TRUE else Value.FALSE,
     }

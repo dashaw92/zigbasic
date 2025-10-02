@@ -86,7 +86,7 @@ tokens: std.ArrayList(Token),
 alloc: *const Alloc,
 
 pub fn init(source: str, alloc: *const Alloc) !Lexer {
-    const tokens = try std.ArrayList(Token).initCapacity(alloc.*, 256);
+    const tokens = try std.ArrayList(Token).initCapacity(alloc.*, 32);
     return .{ .source = source, .pos = 0, .tokens = tokens, .alloc = alloc };
 }
 

@@ -27,7 +27,7 @@ pub fn init(alloc: *const Alloc, io: IO, src: []const u8) !Interpreter {
     var lexer = try Lexer.init(src, alloc);
     try lexer.lex();
 
-    const program = try List(Statement).initCapacity(alloc.*, 256);
+    const program = try List(Statement).initCapacity(alloc.*, 16);
     const state = try State.init(alloc);
 
     var self = Interpreter{
