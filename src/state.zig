@@ -15,20 +15,20 @@ jumps: std.ArrayList(LoopState),
 //Flag for programs to immediately halt interpretation via END keyword.
 halt: bool,
 //1 KB of emulated memory.
-memory: [64]f64,
+memory: []u8,
 //Extensions registered prior to execution enabling peek/poke to be used for real IO.
 extensions: std.ArrayList(MemoryExtension),
 //array ID for deinit
 arrays: std.ArrayList(Array),
 alloc: *const Alloc,
 
-pub fn init(alloc: *const Alloc) !State {
+pub fn init(alloc: *const Alloc, memory: []u8) !State {
     return .{
         .jumpBack = null,
         .symbols = Map(Value).init(alloc.*),
         .strings = try std.ArrayList([]u8).initCapacity(alloc.*, 32),
         .jumps = try std.ArrayList(LoopState).initCapacity(alloc.*, 32),
-        .memory = [_]f64{0} ** 64,
+        .memory = memory,
         .extensions = try std.ArrayList(MemoryExtension).initCapacity(alloc.*, 8),
         .arrays = try std.ArrayList(Array).initCapacity(alloc.*, 16),
         .halt = false,
@@ -91,7 +91,7 @@ pub fn memPeek(self: *State, addr: usize) !f64 {
         }
     }
 
-    return self.memory[addr];
+    return @floatFromInt(self.memory[addr]);
 }
 
 pub fn memPoke(self: *State, addr: usize, value: f64) !void {
@@ -102,7 +102,7 @@ pub fn memPoke(self: *State, addr: usize, value: f64) !void {
             ext.setValue(addr, value);
         }
     }
-    self.memory[addr] = value;
+    self.memory[addr] = @intFromFloat(value);
 }
 
 pub fn concat(self: *State, val1: Value, val2: Value) ![]const u8 {

@@ -23,12 +23,12 @@ program: List(Statement),
 state: State,
 alloc: *const std.mem.Allocator,
 
-pub fn init(alloc: *const Alloc, io: IO, src: []const u8) !Interpreter {
+pub fn init(alloc: *const Alloc, io: IO, memory: []u8, src: []const u8) !Interpreter {
     var lexer = try Lexer.init(src, alloc);
     try lexer.lex();
 
     const program = try List(Statement).initCapacity(alloc.*, 16);
-    const state = try State.init(alloc);
+    const state = try State.init(alloc, memory);
 
     var self = Interpreter{
         .lexer = lexer,

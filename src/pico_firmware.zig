@@ -24,11 +24,11 @@ const pin_cfg = rp2xxx.pins.GlobalConfiguration{ .GPIO15 = .{
 const pins = pin_cfg.pins();
 
 const src =
-    \\10 FOR I = 0 TO 20000
-    \\20 PRINT I
-    \\35 POKE (I % 300) TO 1
-    \\40 NEXT I
-    \\50 GOTO 10
+    \\10 FOR I = 0 TO 4095
+    \\20 POKE I TO I
+    \\21 PRINT I
+    \\30 NEXT I
+    \\40 GOTO 10
 ;
 
 pub fn main() !void {
@@ -52,14 +52,14 @@ pub fn main() !void {
     var a = std.heap.FixedBufferAllocator.init(&mem);
     var alloc = a.allocator();
 
-    var int = try basic.Interpreter.init(&alloc, io, src);
+    var int = try basic.Interpreter.init(&alloc, io, &mem, src);
     defer int.deinit();
 
-    try int.state.registerExtension(.{
-        .address = 1,
-        .getValue = getGPIO,
-        .setValue = setGPIO,
-    });
+    // try int.state.registerExtension(.{
+    //     .address = 1,
+    //     .getValue = getGPIO,
+    //     .setValue = setGPIO,
+    // });
 
     pins.led.toggle();
     int.run() catch {};
@@ -84,11 +84,11 @@ pub fn main() !void {
     }
 }
 
-fn getGPIO(_: usize) f64 {
-    return basic.Value.TRUE.number;
-}
+// fn getGPIO(_: usize) f64 {
+//     return basic.Value.TRUE.number;
+// }
 
-fn setGPIO(_: usize, v: f64) void {
-    if (@abs(v - 1) < std.math.floatEps(f64))
-        pins.led.toggle();
-}
+// fn setGPIO(_: usize, v: f64) void {
+//     if (@abs(v - 1) < std.math.floatEps(f64))
+//         pins.led.toggle();
+// }

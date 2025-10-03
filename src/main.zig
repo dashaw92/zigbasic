@@ -32,7 +32,8 @@ pub fn main() !void {
         .in = &in_handle.interface,
     };
 
-    var int = try Interpreter.init(&alloc, io, src);
+    var memory: [64]u8 = [_]u8{0} ** 64;
+    var int = try Interpreter.init(&alloc, io, &memory, src);
     defer int.deinit();
     // try int.state.registerExtension(.{
     //     .address = 19,
